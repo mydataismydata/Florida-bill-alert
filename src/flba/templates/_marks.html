@@ -1,0 +1,7 @@
+{% macro marked(parts) -%}
+{%- for p in parts -%}
+{%- if p.kind == 'insert' %}<ins>{{ p.text }}</ins>
+{%- elif p.kind == 'delete' %}<del>{{ p.text }}</del>
+{%- else %}{{ p.text }}{% endif %}{{ ' ' if not loop.last }}
+{%- endfor -%}
+{%- endmacro %}

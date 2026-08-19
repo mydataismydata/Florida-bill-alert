@@ -135,3 +135,43 @@ footer.site { border-top: 1px solid var(--line); margin-top: 3rem;
   h2 { page-break-after: avoid; }
   .chg, tr { page-break-inside: avoid; }
 }
+
+/* changed passages, shown in context */
+.passage { background: var(--panel); border: 1px solid var(--line);
+  border-left: 3px solid var(--accent); border-radius: var(--radius);
+  padding: .6rem .85rem; margin: .7rem 0; }
+.passage p { margin: .2rem 0 0; }
+.passage .line { font-size: .78rem; color: var(--muted); text-decoration: none;
+  font-variant-numeric: tabular-nums; }
+.passage .line:hover { color: var(--accent); }
+
+ins, del { text-decoration: none; border-radius: 2px; padding: 0 .12em; }
+ins { background: var(--add-bg); color: var(--add-ink);
+  text-decoration: underline; text-decoration-thickness: 1px; }
+del { background: var(--del-bg); color: var(--del-ink);
+  text-decoration: line-through; }
+
+/* the full document */
+.doc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .86rem; line-height: 1.65; background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: .8rem .4rem; margin-top: .8rem; }
+.doc .ln { display: flex; gap: .7rem; padding: 0 .5rem; }
+.doc .ln:target { background: var(--add-bg); outline: 2px solid var(--accent); }
+.doc .ln.chg { background: var(--bg); }
+.doc .no { flex: 0 0 3.2rem; text-align: right; color: var(--muted);
+  font-variant-numeric: tabular-nums; user-select: none; }
+.doc .no a { color: inherit; text-decoration: none; }
+.doc .no a:hover { color: var(--accent); }
+.doc .tx { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
+
+@media (max-width: 34rem) {
+  .doc { font-size: .8rem; }
+  .doc .no { flex-basis: 2.4rem; }
+}
+@media print {
+  .doc { border: none; font-size: 9pt; }
+  .doc .ln.chg { background: none; }
+  ins { text-decoration: underline; }
+  del { text-decoration: line-through; }
+}

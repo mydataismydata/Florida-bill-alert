@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_marks.html" import marked %}
+{% block title %}{{ b.label }} full text · {{ site_name }}{% endblock %}
+{% block description %}Full text of {{ b.label }} with added and deleted language marked.{% endblock %}
+{% block body %}
+<h1>{{ b.label }} — full text</h1>
+<p class="sub">{{ b.title }}</p>
+<p class="meta">Version {{ version }}{% if fmt == 'house-pdf' %} · rendered from the
+   official PDF, which the Legislature publishes in no other format{% endif %} ·
+   <a href="{{ root }}bills/{{ b.num }}.html">back to the summary</a> ·
+   <a href="{{ b.url }}">official record</a></p>
+
+<p class="legend noprint"><span class="k a">underlined</span> language is being
+   added; <span class="k d">struck</span> language is being deleted. Line
+   numbers are the Legislature's own — the same ones amendments cite.</p>
+
+{% if heavy %}
+<p class="meta noprint">This is a long document — {{ '{:,}'.format(chars) }}
+   characters. It may take a moment to load on a phone.</p>
+{% endif %}
+<div class="doc">
+{% for ln in lines %}
+  <div class="ln{{ ' chg' if ln.changed }}"{% if ln.line %} id="L{{ ln.line }}"{% endif %}>
+    <span class="no">{% if ln.line %}<a href="#L{{ ln.line }}">{{ ln.line }}</a>{% endif %}</span>
+    <span class="tx">{{ marked(ln.parts) }}</span>
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

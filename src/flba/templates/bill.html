@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_marks.html" import marked %}
 {% block title %}{{ b.label }} — {{ b.title|truncate(70) }} · {{ site_name }}{% endblock %}
 {% block description %}{{ b.label }}: {{ b.title|truncate(150) }}{% endblock %}
 {% block body %}
@@ -46,7 +47,7 @@
 <tr>
   <td class="num"><a href="{{ root }}statutes/{{ r.statute }}.html">s. {{ r.statute }}</a></td>
   <td>{{ r.action }}</td>
-  <td class="num">{% if r.line_start %}line {{ r.line_start }}{% else %}<span class="meta">title</span>{% endif %}</td>
+  <td class="num">{% if r.line_start and has_text %}<a href="{{ root }}bills/{{ b.num }}-text.html#L{{ r.line_start }}">line {{ r.line_start }}</a>{% elif r.line_start %}line {{ r.line_start }}{% else %}<span class="meta">title</span>{% endif %}</td>
   <td class="num">{% if r.words_added or r.words_deleted %}+{{ r.words_added }} / −{{ r.words_deleted }}{% endif %}</td>
   <td class="meta">{{ r.scope|truncate(70) }}</td>
 </tr>
@@ -54,21 +55,24 @@
 </tbody></table></div>
 {% endif %}
 
-{% if changes %}
+{% if blocks %}
 <h2>What the text changes</h2>
-<p class="legend">Read straight from the bill: <span class="k a">added</span>
-   and <span class="k d">deleted</span> language, with the line numbers the
-   Legislature itself uses. {{ stats.words_inserted }} words added,
-   {{ stats.words_deleted }} deleted.</p>
-{% for c in changes %}
-<div class="chg {{ 'add' if c.kind == 'insert' else 'del' }}">
-  {% if c.line %}<div class="line">line {{ c.line }}</div>{% endif %}
-  <span class="text">{{ c.text }}</span>
+<p class="legend"><span class="k a">Underlined</span> language is being added;
+   <span class="k d">struck</span> language is being deleted. Each passage is
+   shown as it reads in the bill. {{ stats.words_inserted }} words added,
+   {{ stats.words_deleted }} deleted across {{ total_changes }} places.</p>
+{% for blk in blocks %}
+<div class="passage">
+  {% if blk.line %}{% if has_text %}<a class="line" href="{{ root }}bills/{{ b.num }}-text.html#L{{ blk.line }}">line {{ blk.line }}</a>{% else %}<span class="line">line {{ blk.line }}</span>{% endif %}{% endif %}
+  <p>{{ marked(blk.parts) }}</p>
 </div>
 {% endfor %}
-{% if truncated %}<p class="more">Showing the first {{ changes|length }} of
-  {{ total_changes }} changes. The full text is on
-  <a href="{{ b.url }}">flsenate.gov</a>.</p>{% endif %}
+<p class="more">
+  {% if truncated %}Showing {{ blocks|length }} of {{ total_blocks }} changed
+  passages. {% endif %}
+  <a href="{{ root }}bills/{{ b.num }}-text.html">Read the full bill with every
+  change marked →</a>
+</p>
 {% endif %}
 
 {% if analyses %}

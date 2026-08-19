@@ -102,6 +102,13 @@ CREATE TABLE IF NOT EXISTS change (
     PRIMARY KEY (session, num, version, seq)
 );
 
+CREATE TABLE IF NOT EXISTS bill_render (
+    session TEXT, num INTEGER, version TEXT,
+    fmt TEXT, nsegments INTEGER, nchars INTEGER,
+    segments TEXT,          -- compact JSON: [[kind,line,page,text], ...]
+    PRIMARY KEY (session, num, version)
+);
+
 CREATE INDEX IF NOT EXISTS idx_change_bill ON change(session, num);
 CREATE INDEX IF NOT EXISTS idx_statute ON statute_ref(session, statute);
 CREATE INDEX IF NOT EXISTS idx_bill_session ON bill(session);
@@ -204,6 +211,35 @@ class Store:
                  r.scope, r.verb, r.line_start, r.line_end, r.words_added,
                  r.words_deleted, int(r.in_title), int(r.in_body)))
         self.db.execute("COMMIT")
+
+    def save_render(self, session, num, version, fmt, segments) -> None:
+        """Keep the parsed document so the site can show a change inside its
+        sentence, and render the whole bill, without re-parsing a 300-page PDF
+        on every build."""
+        import json
+        kinds = {"plain": 0, "insert": 1, "delete": 2}
+        packed = [[kinds.get(s.kind, 0), s.line, s.page, s.text]
+                  for s in segments]
+        blob = json.dumps(packed, separators=(",", ":"), ensure_ascii=False)
+        self.db.execute("BEGIN IMMEDIATE")
+        self.db.execute(
+            "INSERT OR REPLACE INTO bill_render VALUES (?,?,?,?,?,?,?)",
+            (session, num, version, fmt, len(segments),
+             sum(len(s.text) for s in segments), blob))
+        self.db.execute("COMMIT")
+
+    def load_render(self, session, num):
+        import json
+        row = self.db.execute(
+            "SELECT version,fmt,segments FROM bill_render"
+            " WHERE session=? AND num=?", (session, num)).fetchone()
+        if not row:
+            return None
+        names = {0: "plain", 1: "insert", 2: "delete"}
+        from .diff import BillDiff, Segment
+        segs = [Segment(names[k], t, ln, pg)
+                for k, ln, pg, t in json.loads(row["segments"])]
+        return row["version"], row["fmt"], BillDiff(row["fmt"], segs)
 
     def save_changes(self, session, num, version, segments) -> None:
         """Persist the additions and deletions so the site build need not

@@ -255,6 +255,97 @@ def parse_house_pdf(path: str | Path, pages=None) -> BillDiff:
     return diff
 
 
+# --------------------------------------------------------------------------
+# Presenting a diff
+# --------------------------------------------------------------------------
+
+SENTENCE_END = re.compile(r"[.;:]\s")
+
+
+@dataclass
+class ContextBlock:
+    """A run of changes together with the words around them.
+
+    An isolated fragment tells a reader nothing -- "does" or "shall be
+    assessed" could mean anything. What matters is the sentence it sits in,
+    so changes are shown inside their surrounding text with the added and
+    deleted words marked in place.
+    """
+    line: int | None
+    page: int | None
+    parts: list[Segment] = field(default_factory=list)
+
+    @property
+    def changed(self) -> int:
+        return sum(1 for p in self.parts if p.kind != PLAIN)
+
+
+def context_blocks(diff: BillDiff, pad: int = 220,
+                   max_blocks: int = 0, join_gap: int = 400) -> list[ContextBlock]:
+    """Group each change with the text around it.
+
+    Changes closer together than `join_gap` characters share one block, so a
+    heavily edited sentence reads as one passage rather than being repeated
+    once per altered word.
+    """
+    segs = diff.segments
+    if not segs:
+        return []
+
+    marked = [i for i, s in enumerate(segs) if s.kind != PLAIN]
+    if not marked:
+        return []
+
+    # walk outward from each change until the character budget is spent
+    spans: list[tuple[int, int]] = []
+    for i in marked:
+        lo = hi = i
+        budget = pad
+        while lo > 0 and budget > 0:
+            lo -= 1
+            budget -= len(segs[lo].text)
+        budget = pad
+        while hi < len(segs) - 1 and budget > 0:
+            hi += 1
+            budget -= len(segs[hi].text)
+        spans.append((lo, hi))
+
+    merged: list[list[int]] = []
+    for lo, hi in spans:
+        if merged and lo <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+
+    blocks = []
+    for lo, hi in merged:
+        parts = segs[lo:hi + 1]
+        line = next((p.line for p in parts if p.line), None)
+        page = next((p.page for p in parts if p.page), None)
+        blocks.append(ContextBlock(line=line, page=page, parts=list(parts)))
+    return blocks[:max_blocks] if max_blocks else blocks
+
+
+def lines(diff: BillDiff) -> list[dict]:
+    """Regroup segments into the bill's own numbered lines, for full display.
+
+    Segments break wherever the marking changes, so several belong to one
+    printed line; the line number is what the Legislature cites and what an
+    amendment refers to, which makes it the right unit to render and anchor.
+    """
+    out: list[dict] = []
+    cur: dict | None = None
+    for seg in diff.segments:
+        if cur is None or (seg.line is not None and seg.line != cur["line"]):
+            cur = {"line": seg.line, "page": seg.page, "parts": [],
+                   "changed": False}
+            out.append(cur)
+        cur["parts"].append(seg)
+        if seg.kind != PLAIN:
+            cur["changed"] = True
+    return out
+
+
 def parse(path_or_html, chamber: str) -> BillDiff:
     """Dispatch on chamber; both return the same structure."""
     if chamber.lower().startswith("s"):

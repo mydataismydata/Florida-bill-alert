@@ -24,10 +24,14 @@ def built(tmp_path_factory):
     return out, stats
 
 
-def test_it_writes_a_page_per_bill(built):
+def test_it_writes_a_summary_and_a_full_text_page_per_bill(built):
     out, stats = built
     assert stats["bills"] == 40
-    assert len(list((out / "bills").glob("*.html"))) == 40
+    summaries = [p for p in (out / "bills").glob("*.html")
+                 if not p.stem.endswith("-text")]
+    assert len(summaries) == 40
+    # a full-text page exists wherever the bill's text was cached
+    assert list((out / "bills").glob("*-text.html"))
 
 
 def test_no_template_syntax_escapes_into_the_output(built):
@@ -45,9 +49,10 @@ def test_every_internal_link_resolves(built):
     for page in out.rglob("*.html"):
         soup = BeautifulSoup(page.read_text(encoding="utf-8"), "lxml")
         for a in soup.find_all(["a", "link"], href=True):
-            href = a["href"]
-            if urlparse(href).scheme or href.startswith("#"):
-                continue
+            href = urlparse(a["href"])
+            if href.scheme or not href.path:
+                continue          # external, or a same-page anchor
+            href = href.path
             checked += 1
             assert (page.parent / href).resolve().exists(), f"{page} -> {href}"
     assert checked > 50
@@ -72,10 +77,42 @@ def test_search_index_matches_the_pages_written(built):
         assert set(row) == {"n", "l", "t", "o", "s"}
 
 
+def test_changes_are_shown_inside_their_sentence(built):
+    """An isolated fragment is useless -- "does" or "shall be assessed" tells
+    a reader nothing without the sentence around it."""
+    from bs4 import BeautifulSoup
+    out, _ = built
+    for page in (out / "bills").glob("*.html"):
+        if page.stem.endswith("-text"):
+            continue
+        soup = BeautifulSoup(page.read_text(encoding="utf-8"), "lxml")
+        passages = soup.select(".passage")
+        if not passages:
+            continue
+        marks = passages[0].select("ins, del")
+        assert marks, "a changed passage must mark what changed"
+        body = passages[0].find("p").get_text(" ", strip=True)
+        changed = sum(len(m.get_text()) for m in marks)
+        assert len(body) > changed, "the passage must carry surrounding context"
+        return
+    pytest.skip("no changed passages in this slice")
+
+
+def test_full_text_page_keeps_the_legislatures_line_numbers(built):
+    from bs4 import BeautifulSoup
+    out, _ = built
+    page = next(iter((out / "bills").glob("*-text.html")))
+    soup = BeautifulSoup(page.read_text(encoding="utf-8"), "lxml")
+    numbered = [d for d in soup.select(".doc .ln") if d.get("id")]
+    assert numbered, "lines must be anchorable for citation"
+    assert numbered[0]["id"].startswith("L")
+
+
 def test_a_bill_page_carries_its_outcome_and_pathway(built):
     from bs4 import BeautifulSoup
     out, _ = built
-    page = next((out / "bills").glob("*.html"))
+    page = next(p for p in (out / "bills").glob("*.html")
+                if not p.stem.endswith("-text"))
     soup = BeautifulSoup(page.read_text(encoding="utf-8"), "lxml")
     assert soup.find("h1")
     assert soup.find(class_="badge"), "outcome badge missing"

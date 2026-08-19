@@ -446,8 +446,7 @@ def cmd_crossref(args) -> int:
                 d = parse_house_pdf(path)
             refs = cross_reference(d)
             store.save_statute_refs(args.session, num, version, refs)
-            store.save_changes(args.session, num, version,
-                               d.insertions + d.deletions)
+            store.save_render(args.session, num, version, fmt, d.segments)
             total += len(refs)
         except Exception as exc:
             failed += 1

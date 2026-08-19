@@ -16,12 +16,14 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from .diff import PLAIN, BillDiff, Segment, context_blocks, lines as doc_lines
 from .stages import kind_of, pathway, track
 
 HERE = Path(__file__).resolve().parent
 SITE_NAME = "Florida Bill Alert"
 REPO = "https://github.com/mydataismydata/Florida-bill-alert"
-MAX_CHANGES = 60          # per bill page; the rest stay one click away
+MAX_BLOCKS = 12           # changed passages on the summary page
+KIND_NAMES = {0: "plain", 1: "insert", 2: "delete"}
 SAFE_CITE = re.compile(r"^[0-9A-Za-z.]+$")
 
 
@@ -35,6 +37,16 @@ def _env() -> Environment:
 
 def _rows(db, sql, *args):
     return db.execute(sql, args).fetchall()
+
+
+def _load_render(db, session, num):
+    row = db.execute("SELECT version,fmt,segments FROM bill_render"
+                     " WHERE session=? AND num=?", (session, num)).fetchone()
+    if not row:
+        return None
+    segs = [Segment(KIND_NAMES[k], t, ln, pg)
+            for k, ln, pg, t in json.loads(row["segments"])]
+    return row["version"], row["fmt"], BillDiff(row["fmt"], segs)
 
 
 def build(db_path: Path, out: Path, session: str, built: str | None = None,
@@ -76,24 +88,35 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         refs = _rows(db, "SELECT * FROM statute_ref WHERE session=? AND num=?"
                          " ORDER BY bill_section IS NULL, bill_section, statute",
                      session, b["num"])
-        changes = _rows(db, "SELECT kind,line,page,text FROM change"
-                            " WHERE session=? AND num=? ORDER BY seq",
-                        session, b["num"])
         analyses = _rows(db, "SELECT kind,author,posted,url FROM analysis"
                              " WHERE session=? AND num=? ORDER BY posted",
                          session, b["num"])
-        shown = [dict(c) for c in changes[:MAX_CHANGES]]
-        stats = {
-            "words_inserted": sum(len(c["text"].split())
-                                  for c in changes if c["kind"] == "insert"),
-            "words_deleted": sum(len(c["text"].split())
-                                 for c in changes if c["kind"] == "delete"),
-        }
+        loaded = _load_render(db, session, b["num"])
+        blocks, all_blocks, stats, version, fmt = [], [], {}, None, None
+        if loaded:
+            version, fmt, d = loaded
+            nchars = sum(len(s.text) for s in d.segments)
+            all_blocks = context_blocks(d)
+            blocks = all_blocks[:MAX_BLOCKS]
+            stats = {
+                "words_inserted": sum(len(s.text.split())
+                                      for s in d.segments if s.kind == "insert"),
+                "words_deleted": sum(len(s.text.split())
+                                     for s in d.segments if s.kind == "delete"),
+            }
+            # the whole bill, marked, with the Legislature's line numbers
+            (out / "bills" / f"{b['num']}-text.html").write_text(
+                env.get_template("text.html").render(
+                    root="../", b=b, version=version, fmt=fmt,
+                    lines=doc_lines(d), chars=nchars,
+                    heavy=nchars > 250_000, **common), encoding="utf-8")
 
         html = env.get_template("bill.html").render(
             root="../", b=b, p=prog, path=pathway(prog), refs=refs,
-            changes=shown, total_changes=len(changes),
-            truncated=len(changes) > MAX_CHANGES, stats=stats,
+            blocks=blocks, total_blocks=len(all_blocks),
+            has_text=loaded is not None,
+            total_changes=sum(bk.changed for bk in all_blocks),
+            truncated=len(all_blocks) > MAX_BLOCKS, stats=stats,
             analyses=analyses, history=history.get(b["num"], []), **common)
         (out / "bills" / f"{b['num']}.html").write_text(html, encoding="utf-8")
 
