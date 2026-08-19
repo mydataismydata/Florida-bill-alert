@@ -234,3 +234,84 @@ The single "still moving" bill is SPB 7042, which was temporarily postponed in
 committee and has no terminal action on the record at all. Reporting it as
 pending is correct: the tracker states what the record says rather than
 inferring a death the Legislature never wrote down.
+
+## Statute cross-references
+
+`flba.statutes` answers which statutes a bill operates on, what it does to
+each, and how much text it moves — then inverts that into "who is touching this
+statute this session?"
+
+```bash
+flba --session 2026 crossref                    # build the index
+flba --session 2026 statutes 1452               # what one bill touches
+flba --session 2026 statutes --statute 119.071  # who touches one statute
+```
+
+Two independent sources are combined. The **formal title** is legally required
+to say what the bill does (`amending s. 215.422, F.S.; creating s. 497.1411,
+F.S.`), and the **numbered sections** in the body then do it:
+
+```
+Section 1. Subsection (15) of section 215.422, Florida Statutes, is amended to read:
+Section 7. Section 497.1411, Florida Statutes, is created to read:
+Section 3. Subsection (16) is added to section 493.6102, Florida Statutes, to read:
+Section 9. Section 322.27, Florida Statutes, is repealed.
+```
+
+Pairing those with the additions/deletions from `flba.diff` produces the claim
+this layer exists for — *amends s. 215.5586 at line 292, adding 324 words and
+deleting 173* — every part of which the reader can check against the bill.
+
+Action verbs observed, in frequency order: amended, created, added,
+redesignated, reenacted, renumbered, reordered, transferred, directed. `added`
+is normalised to *amend* (a subsection added to an existing statute), and the
+redesignate/renumber family to *renumber*.
+
+### Traps
+
+**A chapter can be operated on wholesale.** `Chapter 205, Florida Statutes,
+consisting of ss. 205.013, 205.022, ..., is repealed.` Matching only
+`section N, Florida Statutes` reports a repeal of forty statutes as a repeal of
+none.
+
+**Subsection markers are not statutes.** `reenacting s. 493.6201(4), F.S.`
+names one statute. Harvesting every number in the clause invents a phantom
+`s. 4`. Parentheticals are stripped first, and a section number must contain a
+dot.
+
+**Title clauses do not always end in "F.S."** A long reenactment list often
+runs straight into `relating to ...`. Requiring the `F.S.` terminator silently
+dropped whole enumerations — one bill lost 7 of its 11 statutes that way.
+
+### Validation
+
+The site's own Citations tab is an independent source, so extraction can be
+checked against it. Across **558 bills / 2,771 listed citations**:
+
+| | |
+|---|---|
+| Recall | **98.7%** |
+| False positives | **0** |
+| Bills below 90% recall | 3 |
+
+One methodological note that cost an apparent 12 points: the Citations tab
+reflects a bill's **latest** version, so comparing it against a parse of the
+*Filed* version compares two different documents. Measured against the matching
+version, recall went from 86.1% to 98.4%, and the remaining fixes took it to
+98.7%.
+
+### What the index shows
+
+Most-touched statutes of the 2026 session:
+
+| statute | bills | subject |
+|---|---|---|
+| s. 921.0022 | 27 | Criminal Punishment Code offense severity ranking |
+| s. 119.071 | 23 | Public records exemptions |
+| s. 1001.42 | 22 | School district powers and duties |
+| s. 212.08 | 13 | Sales tax exemptions |
+| s. 627.351 | 13 | Insurance risk apportionment |
+
+That reverse index is a product feature in itself: *"what is happening to the
+public records law this session?"* is one query, and it is exactly the question
+an activist or a reporter arrives with.

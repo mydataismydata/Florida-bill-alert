@@ -87,6 +87,16 @@ CREATE TABLE IF NOT EXISTS related (
     PRIMARY KEY (session, num, label, relationship)
 );
 
+CREATE TABLE IF NOT EXISTS statute_ref (
+    session TEXT, num INTEGER, version TEXT,
+    statute TEXT, action TEXT, bill_section INTEGER, scope TEXT, verb TEXT,
+    line_start INTEGER, line_end INTEGER,
+    words_added INTEGER, words_deleted INTEGER,
+    in_title INTEGER, in_body INTEGER,
+    PRIMARY KEY (session, num, version, statute, bill_section)
+);
+
+CREATE INDEX IF NOT EXISTS idx_statute ON statute_ref(session, statute);
 CREATE INDEX IF NOT EXISTS idx_bill_session ON bill(session);
 CREATE INDEX IF NOT EXISTS idx_hist_bill    ON history(session, num);
 """
@@ -173,6 +183,19 @@ class Store:
                 "INSERT OR REPLACE INTO related VALUES (?,?,?,?,?,?,?,?)",
                 (s, n, r["label"], r["subject"], r["filed_by"],
                  r["relationship"], r["status"], r["url"]))
+        self.db.execute("COMMIT")
+
+    def save_statute_refs(self, session, num, version, refs) -> None:
+        self.db.execute("BEGIN IMMEDIATE")
+        self.db.execute(
+            "DELETE FROM statute_ref WHERE session=? AND num=? AND version=?",
+            (session, num, version))
+        for r in refs:
+            self.db.execute(
+                "INSERT OR REPLACE INTO statute_ref VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (session, num, version, r.statute, r.action, r.bill_section,
+                 r.scope, r.verb, r.line_start, r.line_end, r.words_added,
+                 r.words_deleted, int(r.in_title), int(r.in_body)))
         self.db.execute("COMMIT")
 
     def known_bill_nums(self, session: str) -> set:

@@ -408,6 +408,127 @@ def cmd_track(args) -> int:
     return 0
 
 
+def cmd_crossref(args) -> int:
+    """Build the statute cross-reference index from cached bill text."""
+    from .diff import parse_house_pdf, parse_senate_html
+    from .statutes import cross_reference
+
+    fetcher, store, _ = _paths(args.session)
+    db = store.db
+    rows = db.execute(
+        "SELECT num, MAX(rowid) mr FROM bill_text WHERE session=? GROUP BY num",
+        (args.session,)).fetchall()
+
+    jobs = []
+    for r in rows:
+        t = db.execute("SELECT version,fmt,url FROM bill_text WHERE rowid=?",
+                       (r["mr"],)).fetchone()
+        # prefer HTML for this version if both formats exist
+        h = db.execute("SELECT url FROM bill_text WHERE session=? AND num=?"
+                       " AND version=? AND fmt='HTML'",
+                       (args.session, r["num"], t["version"])).fetchone()
+        url, fmt = (h["url"], "HTML") if h else (t["url"], t["fmt"])
+        if fetcher.local_path(url).exists():
+            jobs.append((r["num"], t["version"], fmt, url))
+    if args.limit:
+        jobs = jobs[:args.limit]
+
+    print(f"crossref: {len(jobs)} bills with cached text "
+          f"({len(rows) - len(jobs)} not yet fetched)")
+    prog, total, failed = Progress(len(jobs), "crossref"), 0, 0
+    for num, version, fmt, url in jobs:
+        path = fetcher.local_path(url)
+        try:
+            if fmt == "HTML":
+                d = parse_senate_html(path.read_text(encoding="utf-8",
+                                                     errors="replace"))
+            else:
+                d = parse_house_pdf(path)
+            refs = cross_reference(d)
+            store.save_statute_refs(args.session, num, version, refs)
+            total += len(refs)
+        except Exception as exc:
+            failed += 1
+            if failed <= 5:
+                print(f"  {num}: {exc}")
+        prog.tick()
+    print(f"\ncrossref: {total} statute references indexed, {failed} failures")
+    return 0
+
+
+def cmd_statutes(args) -> int:
+    """A bill's statute references, or every bill touching one statute."""
+    _, store, _ = _paths(args.session)
+    db = store.db
+
+    if args.statute:
+        cite = args.statute.lstrip("s. ").strip()
+        rows = db.execute(
+            "SELECT r.num, b.label, b.title, r.action, r.bill_section,"
+            "       r.words_added, r.words_deleted, b.chapter_law"
+            "  FROM statute_ref r JOIN bill b"
+            "    ON b.session=r.session AND b.num=r.num"
+            " WHERE r.session=? AND r.statute=?"
+            " ORDER BY b.chapter_law IS NULL, r.num", (args.session, cite)
+        ).fetchall()
+        if not rows:
+            print(f"no bill in {args.session} touches s. {cite}"
+                  f" (run `crossref` first?)")
+            return 1
+        print(f"s. {cite} — {len(rows)} bill(s) in session {args.session}")
+        print(f"  https://www.flsenate.gov/laws/statutes/2025/{cite}\n")
+        for r in rows:
+            law = f"  [Ch. {r['chapter_law']}]" if r["chapter_law"] else ""
+            print(f"  {r['label']:<16} {r['action']:<8} "
+                  f"+{r['words_added']}/-{r['words_deleted']}{law}")
+            print(f"      {r['title'][:82]}")
+        return 0
+
+    if not args.number:
+        print("give a bill number, or --statute <cite>", file=sys.stderr)
+        return 2
+    num = int(re.search(r"(\d+)", args.number).group(1))
+    bill = db.execute("SELECT label,title FROM bill WHERE session=? AND num=?",
+                      (args.session, num)).fetchone()
+    rows = db.execute(
+        "SELECT * FROM statute_ref WHERE session=? AND num=?"
+        " ORDER BY bill_section IS NULL, bill_section, statute",
+        (args.session, num)).fetchall()
+    if not bill:
+        print(f"bill {num} not ingested", file=sys.stderr)
+        return 2
+    print(f"{bill['label']} — {bill['title']}")
+    if not rows:
+        have = db.execute("SELECT COUNT(*) c FROM bill_text WHERE session=?"
+                          " AND num=?", (args.session, num)).fetchone()["c"]
+        indexed = db.execute("SELECT COUNT(*) c FROM statute_ref WHERE session=?",
+                             (args.session,)).fetchone()["c"]
+        if not have:
+            print("  this bill has no text on file at all")
+        elif not indexed:
+            print(f"  nothing indexed yet — run:"
+                  f" flba --session {args.session} crossref")
+        else:
+            print(f"  text not cached yet — run:"
+                  f" flba --session {args.session} bill {num} --with-docs,"
+                  f" then crossref")
+        return 1
+    print(f"  {len(rows)} statute reference(s)\n")
+    if args.json:
+        print(json.dumps([dict(r) for r in rows], indent=1))
+        return 0
+    for r in rows:
+        where = f"line {r['line_start']}" if r["line_start"] else "title only"
+        churn = (f"+{r['words_added']}/-{r['words_deleted']}"
+                 if (r["words_added"] or r["words_deleted"]) else "")
+        sec = f"§{r['bill_section']}" if r["bill_section"] else "  "
+        print(f"  {sec:>4}  {r['action']:<8} s. {r['statute']:<12} "
+              f"{where:<12} {churn}")
+        if r["scope"]:
+            print(f"        {r['scope'][:88]}")
+    return 0
+
+
 def cmd_status(args) -> int:
     _, store, index_path = _paths(args.session)
     db, s = store.db, args.session
@@ -444,6 +565,7 @@ def main(argv=None) -> int:
     for name, fn in (("enumerate", cmd_enumerate), ("bills", cmd_bills),
                      ("bill", cmd_bill), ("docs", cmd_docs),
                      ("diff", cmd_diff), ("track", cmd_track),
+                     ("crossref", cmd_crossref), ("statutes", cmd_statutes),
                      ("status", cmd_status)):
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
@@ -469,6 +591,12 @@ def main(argv=None) -> int:
             sp.add_argument("--summary", action="store_true",
                             help="outcome and stage distribution for the session")
             sp.add_argument("--json", action="store_true")
+        if name == "statutes":
+            sp.add_argument("number", nargs="?", help="bill number")
+            sp.add_argument("--statute", help="reverse lookup, e.g. 286.011")
+            sp.add_argument("--json", action="store_true")
+        if name == "crossref":
+            sp.add_argument("--limit", type=int, default=0)
         if name in ("bills", "docs"):
             sp.add_argument("--limit", type=int, default=0,
                             help="stop after N items -- use this to run the "

@@ -120,7 +120,7 @@ product's value is fully deterministic and carries zero hallucination risk:
 |---|---|---|
 | Stage / pathway tracking | State machine over the bill history log — **built, 100% agreement with the chapter-law record** | **None** |
 | What text is added vs. deleted | Florida bill HTML marks additions (underline) and deletions (strikethrough) — parse it | **None** |
-| Which statutes are amended | Citations section + text parsing | **None** |
+| Which statutes are amended | Title clauses + numbered section openers — **built, 98.7% recall against the site's own citation list, zero false positives** | **None** |
 | Committee referrals, votes, sponsors | Structured scrape | **None** |
 | Sponsor's own fiscal claim | Extract from staff analysis fiscal section | **Low** (extraction, not generation) |
 | Plain-English summary | LLM | Medium |
@@ -375,10 +375,10 @@ met: the corpus rebuilds from cache, offline.* Remaining: contribution docs and
 decision records.
 
 **Phase 1 — The deterministic product — *mostly done, Aug 2026***
-Stage/pathway state machine and the additions/deletions diff parser for both
-chambers are built, tested, and validated against the full 2026 session.
-Remaining: statute cross-references, sponsor fiscal-claim extraction, and the
-static site generator. *Exit: a genuinely useful bill tracker with zero AI in
+Stage/pathway state machine, the additions/deletions diff parser for both
+chambers, and statute cross-referencing (forward and reverse) are built,
+tested, and validated against the full 2026 session. Remaining: sponsor
+fiscal-claim extraction and the static site generator. *Exit: a genuinely useful bill tracker with zero AI in
 it.* This is the checkpoint that de-risks everything — if the project stopped
 here it would still be worth publishing.
 
@@ -422,7 +422,9 @@ separate from the analysis layer, which costs nothing to do from the start.
 6. ~~Build the stage/pathway tracker.~~ **Done**, and it classifies all 1,897
    bills from history alone with zero misclassifications against the
    chapter-law record.
-7. **Render the static site.** The deterministic product is now complete:
+7. ~~Build statute cross-references.~~ **Done**, with a reverse index — "which
+   bills touch s. 119.071 this session?" is one query.
+8. **Render the static site.** The deterministic product is now complete:
    stage, pathway, additions/deletions, statute cross-references, sponsor
    fiscal claims. That is a genuinely useful bill tracker with no AI in it,
    and publishing it is the checkpoint that de-risks everything after.
