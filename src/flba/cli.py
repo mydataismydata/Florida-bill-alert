@@ -266,6 +266,77 @@ def cmd_docs(args) -> int:
     return 1 if failures else 0
 
 
+def cmd_diff(args) -> int:
+    """Show what a bill adds and deletes -- no model involved."""
+    from . import diff as diffmod
+
+    fetcher, store, _ = _paths(args.session)
+    db = store.db
+    num = int(re.search(r"(\d+)", args.number).group(1))
+
+    bill = db.execute("SELECT * FROM bill WHERE session=? AND num=?",
+                      (args.session, num)).fetchone()
+    if not bill:
+        print(f"bill {num} not ingested; run: flba --session {args.session} "
+              f"bill {num}", file=sys.stderr)
+        return 2
+
+    rows = db.execute(
+        "SELECT version, fmt, url FROM bill_text WHERE session=? AND num=?",
+        (args.session, num)).fetchall()
+    versions = {}
+    for r in rows:                       # HTML wins where both exist
+        cur = versions.get(r["version"])
+        if cur is None or (cur["fmt"] == "PDF" and r["fmt"] == "HTML"):
+            versions[r["version"]] = r
+    if not versions:
+        print(f"no text for {bill['label']}", file=sys.stderr)
+        return 2
+
+    key = args.version or list(versions)[-1 if args.latest else 0]
+    if key not in versions:
+        print(f"no such version {key!r}; have: {', '.join(versions)}",
+              file=sys.stderr)
+        return 2
+    chosen = versions[key]
+
+    res = fetcher.fetch(chosen["url"])
+    store.log_fetch(res)
+    if not res.ok:
+        print(f"fetch failed: HTTP {res.status}", file=sys.stderr)
+        return 1
+
+    if chosen["fmt"] == "HTML":
+        d = diffmod.parse_senate_html(res.text())
+    else:
+        d = diffmod.parse_house_pdf(res.path)
+
+    st = d.stats()
+    print(f"{bill['label']} — {bill['title']}")
+    print(f"  version {chosen['version']} ({chosen['fmt']}, via {st['source']})")
+    print(f"  {st['words_inserted']} words added in {st['insertions']} runs; "
+          f"{st['words_deleted']} words deleted in {st['deletions']} runs")
+
+    if args.json:
+        print(json.dumps({"bill": bill["label"], "version": chosen["version"],
+                          "stats": st,
+                          "segments": [{"kind": x.kind, "text": x.text,
+                                        "line": x.line, "page": x.page}
+                                       for x in d.segments
+                                       if x.kind != diffmod.PLAIN]}, indent=1))
+        return 0
+
+    for label, segs in (("ADDS", d.insertions), ("DELETES", d.deletions)):
+        print(f"\n  {label}")
+        for seg in segs[:args.show]:
+            loc = f"line {seg.line}" if seg.line else "—"
+            print(f"    {loc:>10}  {seg.text[:96]}")
+        if len(segs) > args.show:
+            print(f"    ... and {len(segs) - args.show} more "
+                  f"(raise with --show, or use --json)")
+    return 0
+
+
 def cmd_status(args) -> int:
     _, store, index_path = _paths(args.session)
     db, s = store.db, args.session
@@ -301,7 +372,7 @@ def main(argv=None) -> int:
 
     for name, fn in (("enumerate", cmd_enumerate), ("bills", cmd_bills),
                      ("bill", cmd_bill), ("docs", cmd_docs),
-                     ("status", cmd_status)):
+                     ("diff", cmd_diff), ("status", cmd_status)):
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
         sp.add_argument("--refresh", action="store_true",
@@ -313,6 +384,14 @@ def main(argv=None) -> int:
                             help="also fetch this bill's text and analyses")
             sp.add_argument("--cached", action="store_true",
                             help="use the cache instead of re-fetching")
+        if name == "diff":
+            sp.add_argument("number", help="bill number, e.g. 1277")
+            sp.add_argument("--version", help="which text version")
+            sp.add_argument("--latest", action="store_true",
+                            help="use the last version rather than the first")
+            sp.add_argument("--show", type=int, default=12,
+                            help="how many runs to print per side")
+            sp.add_argument("--json", action="store_true")
         if name in ("bills", "docs"):
             sp.add_argument("--limit", type=int, default=0,
                             help="stop after N items -- use this to run the "

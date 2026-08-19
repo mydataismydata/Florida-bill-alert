@@ -78,40 +78,80 @@ Parser traps found the hard way:
 
 ## Additions and deletions — the diff layer
 
-This is the highest-value deterministic signal and the mechanism differs by
-chamber.
+**Built and validated.** `flba.diff` produces the same `Segment` list for both
+chambers, so everything downstream is chamber-agnostic:
 
-**Senate — HTML, trivial.** Bill text is Word-generated HTML carrying:
+```bash
+flba --session 2026 diff 1277           # House, via PDF geometry
+flba --session 2026 diff 552 --json     # Senate, via HTML
+```
+
+### Senate — HTML
+
+Bill text is Word-generated HTML carrying:
 
 ```css
 .Insert { color: #339933; text-decoration: underline }
 .Remove { color: #FF0000; text-decoration: line-through }
 ```
 
-Additions are `<u class="Insert">`, deletions `<s class="Remove">`.
-CS/CS/CS/SB 1452 alone has 1,601 insertions and 977 deletions. The documents
-also embed Office metadata (`mso:BillNumber`, `mso:BillFiledDate`,
-`mso:BillShortTitle`, `mso:BillVersionName`). **100% of Senate bills** (942/942)
-have at least one HTML version.
+**Do not collect whole `<u>`/`<s>` elements.** The generator splits runs
+mid-word across adjacent tags, so joining elements with a space produces
+`applica bility` and `department s`. Walk text nodes character-by-character and
+run-length encode instead. 100% of Senate bills (942/942) have HTML.
 
-**House — PDF geometry, recoverable.** Only 1 of 955 House bills has HTML.
-Body text is black, so colour is not a signal — only the per-page legend
-("words *stricken* are deletions; words <u>underlined</u> are additions") is
-coloured. The formatting is drawn as thin rules (`height` ≈ 0.48–0.60) which
-`pdfplumber` exposes as `rects`. Classify each rule by where it sits relative
-to the characters it overlaps:
+### House — PDF geometry
+
+Only 1 of 955 House bills has HTML. Body text is black, so colour is no signal —
+only the per-page legend is coloured. The formatting is drawn as thin rules
+(`height` 0.48–0.60) that `pdfplumber` exposes as `rects`. Classify each rule by
+where it sits relative to the words it covers:
 
 | rule position | meaning | measured |
 |---|---|---|
 | below the baseline | **addition** (underline) | frac ≈ 1.04 |
 | through the glyph middle | **deletion** (strikethrough) | frac ≈ 0.53 |
 
-where `frac = (rect.top - char_top) / (char_bottom - char_top)`. The two
-clusters are far apart, so a threshold around 0.78 separates them cleanly. A
-prototype over four pages of CS/CS/HB 797 recovered 72 additions and 28
-deletions with no ambiguous cases.
+where `frac = (rect.top - word.top) / (word.bottom - word.top)`. The clusters
+are far apart; the threshold sits at 0.78. Classify at *word* level with a
+coverage test rather than per character — it gets word spacing right for free.
 
-Two caveats for the real implementation: filter out the page-footer legend
-(it is itself underlined and struck), and reconstruct word spacing from
-character x-gaps, since naive character joining yields
-`attorney-in-factforamember`.
+Page furniture must be dropped by vertical position (body runs roughly
+`120 < top < 650`). The footer legend — "words stricken are deletions; words
+underlined are additions" — is itself struck and underlined, so leaving it in
+adds a false hit on every page.
+
+### Line numbers
+
+Both paths carry the legislature's own line numbers, which is how amendments
+reference text ("between lines 17 and 18, insert"). In the PDF they are the
+leading digits in the left margin (x < 60); in the HTML they lead each line
+inside the `<pre>`. Neither should end up in the extracted words.
+
+### Validation
+
+Many House bills have an **identical Senate companion**, which gives real
+ground truth: parse the House PDF and the Senate HTML of the same bill and
+compare. Across four such pairs, both directions:
+
+| pair | additions | deletions |
+|---|---|---|
+| HB 315 / SB 328 | 99.4% | 99.3% |
+| HB 963 / SB 320 | 98.7% | 99.3% |
+| HB 1277 / SB 552 | 98.1% | 99.8% |
+| HB 1419 / SB 1598 | 99.6% | 97.8% |
+
+**Mean 99.0%, minimum 97.8%.** The residual is a mix of genuine drafting
+differences between separately-filed companions and minor tokenisation noise;
+no systematic failure remains.
+
+Two fixes found by that comparison, both of which had been silently wrong:
+
+- Typographic punctuation. The HTML uses U+2019 while the PDF yields ASCII, so
+  `applicant’s` and `applicant's` tokenised differently. Both are normalised.
+- Line-wrapped hyphens. The PDF breaks `end-of-course` as `end-of-` + `course`.
+  Legislative drafting does not hyphenate to wrap, so the hyphen is real and is
+  kept when stitching — dropping it yields `end-ofcourse`.
+
+`tests/test_diff.py` covers the geometry with synthetic pages (runs anywhere)
+and the corpus comparison as a regression guard (skips without a raw cache).

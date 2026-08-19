@@ -140,7 +140,7 @@ right to be believed about the harder claims.
 `<s class="Remove">` directly. One CSS selector. CS/CS/CS/SB 1452 alone yields
 1,601 additions and 977 deletions.
 
-*House (geometry, ~50 lines).* PDF only, and body text is black, so colour is
+*House (geometry).* PDF only, and body text is black, so colour is
 no help. But Word draws the formatting as thin rules that `pdfplumber` exposes
 as rects, and their vertical position cleanly separates the two cases:
 
@@ -149,13 +149,16 @@ as rects, and their vertical position cleanly separates the two cases:
 | below the baseline | **addition** | frac ≈ 1.04 |
 | through the middle | **deletion** | frac ≈ 0.53 |
 
-A prototype over four pages of CS/CS/HB 797 recovered 72 additions and 28
-deletions with no ambiguous cases. The clusters are far enough apart that this
-is robust rather than a heuristic that will rot.
+**Both paths are now built and validated.** Because many House bills have an
+identical Senate companion, the PDF parser can be checked against HTML ground
+truth on the same bill. Across four such pairs, in both directions:
+**mean 99.0% agreement, minimum 97.8%**. The residual is genuine drafting
+differences between separately-filed companions plus minor tokenisation noise —
+no systematic failure. Both paths also carry the legislature's own line numbers,
+which is how amendments cite text and how a legislator will check a claim.
 
-Budget real time for the House path anyway: it needs word-spacing
-reconstruction from character gaps and filtering of the page-footer legend
-(which is itself underlined and struck). Call it a week, not an afternoon.
+Detail and the two bugs that comparison exposed are in
+[INGEST-NOTES.md](INGEST-NOTES.md).
 
 **Citation-or-it-didn't-happen.** Every LLM-generated claim must carry a character
 span into the source text. A deterministic post-pass then verifies the quoted span
@@ -413,8 +416,11 @@ separate from the analysis layer, which costs nothing to do from the start.
 3. ~~Confirm the AI box specs.~~ **Resolved:** M5 Max, 64 GB, MLX, Qwen3.8-27B.
 4. ~~Run the scraper spike.~~ **Done.** All 1,897 bills of the 2026 session
    ingested with zero fetch failures; findings in [INGEST-NOTES.md](INGEST-NOTES.md).
-5. **Build the House PDF diff parser.** It is the one verified gap between here
-   and a complete deterministic layer, and it gates §4 for half the Legislature.
+5. ~~Build the House PDF diff parser.~~ **Done**, validated at 99.0% against
+   identical Senate companions.
+6. **Build the stage/pathway tracker** — a state machine over the history log.
+   With the diff layer done, that completes the deterministic product (Phase 1):
+   a genuinely useful bill tracker with no AI in it at all.
 5. **Pick a license.** AGPL-3.0 if you want derivative *hosted* versions to stay
    open (relevant — someone will fork this for another state); MIT/Apache-2.0 for
    maximum adoption. This is a values call, not a technical one.
