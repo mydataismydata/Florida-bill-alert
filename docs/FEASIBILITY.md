@@ -239,8 +239,9 @@ The two email products are different and should be built in this order:
 newsletter-volume mail from shared hosting is where projects like this quietly
 die — messages land in spam and nobody tells you. Non-negotiables:
 
-- Correct SPF, DKIM, **and DMARC** (IONOS handles SPF/DKIM automatically on their
-  nameservers; DMARC you set yourself).
+- Confirm **DMARC** is set alongside the SPF/DKIM records IONOS configures
+  automatically — a spam-checker pass usually reflects SPF and DKIM, and DMARC
+  is the one that tends to be missing.
 - **Double opt-in.** Not optional — for deliverability, for CAN-SPAM, and because
   the subscriber list is the project's real asset.
 - One-click unsubscribe (`List-Unsubscribe` header), plaintext alternative,
@@ -256,90 +257,90 @@ work with, which is workable for a list in the low thousands but not beyond.
 
 ---
 
-## 7. Local LLM sizing — MacBook Pro M5 Max, 64GB unified
+## 7. Local model — MLX on the M5 Max
 
-Confirmed hardware changes the recommendation in two ways.
+Runtime is **MLX**, not Ollama. Ollama stays installed as a second backend for
+checking that a prompt is not overfitted to one runtime.
 
-**vLLM is out.** It is CUDA-first and does not run meaningfully on Metal. The
-Apple Silicon stack is **llama.cpp** (Metal backend, `--parallel` slots),
-**MLX** (Apple's own framework, batch generation), or **Ollama** as a
-convenience wrapper over llama.cpp. Plan on llama.cpp or MLX.
+### Model
 
-**64GB unified is a lot more headroom than an 8B model needs.** Reserving
-~16GB for the OS and everything else still leaves ~48GB for weights and KV
-cache. That admits far better models than the 8B originally assumed.
+**`mlx-community/Qwen3.8-27B-4bit`** — dense, Apache-2.0, vision-capable,
+16.1 GB on disk. On 64 GB of unified memory that leaves ample headroom for the
+large KV cache long bills demand.
 
-### Model recommendation
+Note it needs **`mlx-vlm`**, not `mlx-lm` — it is a vision-language model, and
+that catches people out. Full instructions in [SETUP.md](SETUP.md).
 
-**Use a Mixture-of-Experts model, not a dense one.** On Apple Silicon,
-generation speed is governed by how many bytes of weights must be read per
-token, and MoE models read only their active experts:
+Two properties shape the design:
 
-| Candidate | 4-bit size | Active params | Relative gen. speed |
-|---|---|---|---|
-| **Qwen3-30B-A3B (MoE)** | ~17 GB | ~3B | **fastest by a wide margin** |
-| Qwen3-32B (dense) | ~18 GB | 32B | ~3–4× slower than the MoE |
-| Qwen3-8B (dense) | ~5 GB | 8B | fast, but noticeably weaker output |
-| 70B-class (dense, 4-bit) | ~40 GB | 70B | fits, but too slow for 3,000 bills |
+**Dense, not mixture-of-experts.** Every token reads all ~16 GB of weights, so
+generation is bandwidth-bound and slower than an MoE of similar size. The
+trade is quality: Qwen3.8-27B scores far above the architecturally comparable
+3.6 generation. Start here — quality matters more than speed for this
+workload, and the backfill is chunked anyway. If throughput ever binds before
+quality does, benchmark an MoE (the Qwen3.6-35B-A3B line activates ~3B
+parameters per token) and switch by changing a profile name.
 
-The 30B MoE is the sweet spot: roughly 30B-model quality at roughly 3B-model
-speed, in 17GB. It should be the default profile, with 8B kept as the
-low-end contributor profile and a cloud API as the high-end option.
+**Vision, which this project can actually use.** Two of the hardest ingest
+problems are secretly vision problems: House bill text is PDF-only, and the
+fiscal tables inside staff analyses resist text extraction. A VLM reads a
+rendered page directly. Use it strictly as a fallback and cross-check — the
+geometric PDF parser (§4) is deterministic and cheap, and determinism is the
+entire point of the diff layer. Vision is for what geometry cannot reach.
 
-### The real bottleneck is prefill, not generation
+### Backfill is chunked, never a marathon
 
-This is the finding that matters most for the schedule. Bills are long inputs
-producing moderate outputs, and **prompt processing on Apple Silicon is
-relatively weaker than token generation** compared to a datacenter GPU. A
-50,000-token bill can spend minutes in prefill before emitting a single token.
+The operating model is short runs, not multi-day ones. Both the ingest and
+analysis stages are resumable and skip completed work, so `--limit` is a clean
+stopping point and the machine stays usable.
 
-Two optimizations follow, and neither is optional:
+**Prioritisation matters more than raw throughput here.** Measured on 2026:
 
-1. **Reuse the KV cache across passes.** The four analysis passes read the
-   *same* bill. Prefill the bill once, then branch each pass off the shared
-   prefix. Done naively — five independent prompts — you pay the dominant cost
-   five times over. llama.cpp and MLX both support prompt/prefix caching.
-   This alone is worth roughly a **5× reduction** in total wall-clock.
-2. **Run parallel slots.** Batching amortizes weight reads across concurrent
-   sequences, which on a bandwidth-bound machine is close to free throughput.
-   Expect roughly 3–4× aggregate over single-stream.
+- **1,233 of 1,897 bills (65%) never advanced past their filed version.** One
+  short document, one pass, no amendments, no committee substitutes.
+- The ~664 that moved carry nearly all the versions, analyses, votes, and
+  amendments — and all of the public interest.
 
-### Revised throughput estimate
+So `--order activity` front-loads the expensive-and-valuable bills. Most of the
+useful output lands in the first fraction of the compute, and the long tail of
+dead bills can trickle in over following nights. That reorders the schedule
+from "wait days for anything" to "useful corpus tonight."
 
-With prefix reuse and ~4–8 parallel slots, a full 2026 backfill (~3,000
-document-versions × 4 passes + verification) lands in the region of **1–3 days**
-of continuous compute. Daily incremental during session is **well under an
-hour**. Both need a benchmark spike to firm up — treat these as planning
-numbers, not measurements.
+Daily incremental during session is small enough not to matter — a peak
+committee day is tens of bills, not hundreds.
 
-**One practical caveat:** this is a laptop. A 48-hour flat-out backfill means
-sustained thermal load and a machine you can't really use for anything else.
-Schedule backfills overnight or across a weekend, make the pipeline checkpoint
-and resume cleanly (it should anyway), and expect to re-run it whenever you
-change a prompt — which you will, often.
+Two optimisations still carry their weight and should be built in early:
 
-### Design implications for small models
+1. **Reuse the KV cache across passes.** The analysis passes read the *same*
+   bill. Prefill once, branch each pass off the shared prefix. Done naively —
+   five independent prompts — you pay the dominant cost five times. On long
+   inputs this is the single biggest win available.
+2. **Batch where possible.** Concurrency amortises weight reads, which on a
+   bandwidth-bound machine is close to free throughput.
 
-The open-source goal means contributors will run 3B models on laptops far
-weaker than yours. That is a real constraint, not a nice-to-have:
+Firm numbers need a benchmark spike; treat the above as shape, not measurement.
 
-- **Section-aware chunking with map-reduce.** Long bills exceed any practical
-  context window; the General Appropriations Act runs to hundreds of pages.
-  Chunk on the bill's own section structure, never on arbitrary token counts.
-- **Grammar-constrained JSON output** (llama.cpp GBNF, MLX equivalents). Small
-  models are unreliable at free-form JSON and completely reliable when the
-  decoder cannot emit invalid output. Highest-leverage small-model technique
-  there is.
-- **A pluggable backend interface** — `analyze(bill) -> AnalysisBundle` — with
-  implementations for llama.cpp, MLX, Ollama, and OpenAI-compatible/Anthropic
-  APIs. The optional cloud-API path falls out of this for free.
-- **Named model profiles** (`tiny-3b`, `local-8b`, `local-30b-moe`, `cloud`)
-  varying chunk size, pass count, and self-check depth. A contributor on a 3B
-  model should get degraded-but-honest output, and the verification pass should
-  *tell* them quality dropped below threshold rather than silently publishing.
-- **Publish the eval harness.** With 2026 as ground truth, "is this model good
-  enough?" becomes a command anyone can run. That is what makes the
-  multi-model promise credible rather than aspirational.
+### Portability
+
+The analysis box may not stay this machine, and may end up *less* capable.
+That makes the backend abstraction load-bearing rather than decorative:
+everything model-specific sits behind `analyze(bill) -> AnalysisBundle`, with
+named profiles (`tiny-3b`, `local-27b`, `cloud`) selecting model, chunk size,
+and pass count. Moving to a weaker box should mean changing a profile name.
+
+The same mechanism serves the open-source goal — contributors will run small
+models on modest hardware — so it is worth building properly the first time:
+
+- **Section-aware chunking with map-reduce**, on the bill's own section
+  structure rather than arbitrary token counts.
+- **Grammar-constrained JSON output.** Small models are unreliable at
+  free-form JSON and completely reliable when the decoder cannot emit invalid
+  output.
+- **Quality gates that fail loudly.** A contributor on a 3B model should get
+  degraded-but-honest output, and the verification pass should say quality
+  dropped below threshold rather than publish silently.
+- **A published eval harness.** With 2026 as ground truth, "is this model good
+  enough?" becomes a command anyone can run.
 
 ## 8. Risks
 
@@ -347,11 +348,12 @@ weaker than yours. That is a real constraint, not a nice-to-have:
 |---|---|---|
 | Hallucinated provision or cost figure reaches a legislator | **High** | Citation-verification pass; deterministic diff as the headline feature; human review queue before first publish; visible corrections process |
 | "Predictive use" section read as imputing bad faith | **High** | Textual-consequence framing only, never imputed intent; distinct labeling; no named individuals in speculative text |
-| Email lands in spam / IONOS send cap | **High** | SPF+DKIM+DMARC, double opt-in, throttling, dedicated subdomain; **verify caps with IONOS before building** |
+| Email lands in spam | Low | No send caps; outgoing mail already scores well against a spam checker. Confirm DMARC, keep double opt-in |
 | flsenate.gov changes markup or adds bot blocking | Medium | Contract tests on the scraper; Open States as reconciliation; cache all raw HTML/PDF permanently so re-analysis never needs a re-scrape |
 | Session-time volume spike (hundreds of actions/day) | Medium | Batched inference; priority queue (bills with movement first, dead bills last) |
 | Small-model output quality is embarrassing | Medium | Eval harness against 2026; quality gate that refuses to publish below threshold |
 | Solo-maintainer bus factor during a 60-day session | Medium | Everything reproducible from raw cache; the deterministic layer keeps working even if the AI pipeline is down |
+| Analysis box changes to weaker hardware later | Low | Backend abstraction plus named model profiles; switching should be a config change, and the eval harness says what quality was lost |
 | PDF fiscal-table parsing is harder than it looks | Medium | Scope Phase 1 to extraction of the *narrative* fiscal section first; tables later |
 | House diff extraction rots if the House changes its PDF generator | Medium | Golden-file tests over known 2026 House bills; the classifier is geometric, so drift shows up as unclassified rules rather than silent mislabelling — fail loudly |
 | Subscriber PII on shared hosting | Medium | Minimal data (email + prefs only), encrypted at rest, documented retention, no third-party analytics |
@@ -406,14 +408,13 @@ separate from the analysis layer, which costs nothing to do from the start.
 
 1. **Initialize the repo** with the `Data Mine <data.mine@mail.com>` identity set
    repo-locally, plus README, license, and this document.
-2. **Ask IONOS support** two questions: (a) the shared plan's outbound email
-   limits per hour and per day; (b) whether outbound SMTP to their own mail
-   servers from PHP is rate-limited differently than authenticated SMTP.
-3. **Confirm the AI box specs** — GPU model and VRAM. This determines model size,
-   batch width, and every throughput number in §7.
-4. **Run the scraper spike** against the 2026 session. This is the highest-value
-   next action: it either validates §2 completely or surfaces the surprise early,
-   while there's still six months of runway.
+2. ~~Ask IONOS about send limits.~~ **Resolved:** no caps, list under 100,
+   spam scoring already verified. Only DMARC left to confirm.
+3. ~~Confirm the AI box specs.~~ **Resolved:** M5 Max, 64 GB, MLX, Qwen3.8-27B.
+4. ~~Run the scraper spike.~~ **Done.** All 1,897 bills of the 2026 session
+   ingested with zero fetch failures; findings in [INGEST-NOTES.md](INGEST-NOTES.md).
+5. **Build the House PDF diff parser.** It is the one verified gap between here
+   and a complete deterministic layer, and it gates §4 for half the Legislature.
 5. **Pick a license.** AGPL-3.0 if you want derivative *hosted* versions to stay
    open (relevant — someone will fork this for another state); MIT/Apache-2.0 for
    maximum adoption. This is a values call, not a technical one.
