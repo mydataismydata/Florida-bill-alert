@@ -22,7 +22,10 @@ EXACT, LOOSE, FAILED = "exact", "loose", "failed"
 # length floor it cannot satisfy, a model will pad -- emitting the same
 # character until the token budget runs out. That is well-formed, on-schema,
 # and worthless, so it has to be detected rather than trusted.
-_RUN = re.compile(r"(.)\1{24,}")
+# DOTALL matters: the padding actually observed was newlines, and without it
+# "." never matches one, so the run goes undetected whenever the braces happen
+# to balance.
+_RUN = re.compile(r"(.)\1{24,}", re.DOTALL)
 
 
 def is_degenerate(text: str) -> str | None:
