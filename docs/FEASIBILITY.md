@@ -1,8 +1,8 @@
 # Florida Bill Alert — Feasibility Plan
 
 **Status:** draft for discussion · **Date:** 2026-08-19
+**License:** MIT · **Analysis host:** MacBook Pro M5 Max, 64GB unified
 **Repo:** https://github.com/mydataismydata/Florida-bill-alert
-**License intent:** free / open source (see *Open questions*)
 
 ---
 
@@ -222,51 +222,90 @@ work with, which is workable for a list in the low thousands but not beyond.
 
 ---
 
-## 7. Local LLM sizing
+## 7. Local LLM sizing — MacBook Pro M5 Max, 64GB unified
 
-Assuming Qwen3 8B on a single GPU (please confirm the box — VRAM is the variable
-that matters most).
+Confirmed hardware changes the recommendation in two ways.
 
-**Rough throughput** — needs a benchmark spike to firm up, but the shape is clear:
+**vLLM is out.** It is CUDA-first and does not run meaningfully on Metal. The
+Apple Silicon stack is **llama.cpp** (Metal backend, `--parallel` slots),
+**MLX** (Apple's own framework, batch generation), or **Ollama** as a
+convenience wrapper over llama.cpp. Plan on llama.cpp or MLX.
 
-- ~3,000–3,500 analyzable document-versions per session (1,897 bills, but only
-  ~20–25% advance past first committee and generate committee substitutes,
-  engrossed, and enrolled versions).
-- ~5 LLM passes per version (summary, provisions, predictive, cost extraction,
-  verification), ~1–2.5k output tokens each.
-- **Sequential inference: full backfill ≈ 10 days.** Too slow.
-- **With continuous batching (vLLM, or llama.cpp with parallel slots): ≈ 1–2 days.**
-  Fine.
-- **Daily incremental during session: 1–3 hours batched.** Comfortably overnight,
-  even on peak committee days.
+**64GB unified is a lot more headroom than an 8B model needs.** Reserving
+~16GB for the OS and everything else still leaves ~48GB for weights and KV
+cache. That admits far better models than the 8B originally assumed.
 
-**Conclusion: batched inference is required for backfill, optional for daily
-operation.** Budget a day early on to get vLLM or llama.cpp parallel slots working
-— it's the difference between a 10-day and a 1-day rebuild, and you *will* rebuild
-when you change a prompt.
+### Model recommendation
 
-**Design implications for small models** (this matters for the open-source goal —
-contributors will run 3B models on laptops):
+**Use a Mixture-of-Experts model, not a dense one.** On Apple Silicon,
+generation speed is governed by how many bytes of weights must be read per
+token, and MoE models read only their active experts:
 
-- **Section-aware chunking with map-reduce.** Long bills blow past any practical
-  context window; the appropriations bill is hundreds of pages. Chunk on the
-  bill's own section structure, not arbitrary token counts.
-- **Grammar-constrained / schema-forced JSON output** (llama.cpp GBNF, vLLM guided
-  decoding). Small models are unreliable at free-form JSON and completely reliable
-  when the decoder can't emit invalid output. This is the single highest-leverage
-  small-model technique.
+| Candidate | 4-bit size | Active params | Relative gen. speed |
+|---|---|---|---|
+| **Qwen3-30B-A3B (MoE)** | ~17 GB | ~3B | **fastest by a wide margin** |
+| Qwen3-32B (dense) | ~18 GB | 32B | ~3–4× slower than the MoE |
+| Qwen3-8B (dense) | ~5 GB | 8B | fast, but noticeably weaker output |
+| 70B-class (dense, 4-bit) | ~40 GB | 70B | fits, but too slow for 3,000 bills |
+
+The 30B MoE is the sweet spot: roughly 30B-model quality at roughly 3B-model
+speed, in 17GB. It should be the default profile, with 8B kept as the
+low-end contributor profile and a cloud API as the high-end option.
+
+### The real bottleneck is prefill, not generation
+
+This is the finding that matters most for the schedule. Bills are long inputs
+producing moderate outputs, and **prompt processing on Apple Silicon is
+relatively weaker than token generation** compared to a datacenter GPU. A
+50,000-token bill can spend minutes in prefill before emitting a single token.
+
+Two optimizations follow, and neither is optional:
+
+1. **Reuse the KV cache across passes.** The four analysis passes read the
+   *same* bill. Prefill the bill once, then branch each pass off the shared
+   prefix. Done naively — five independent prompts — you pay the dominant cost
+   five times over. llama.cpp and MLX both support prompt/prefix caching.
+   This alone is worth roughly a **5× reduction** in total wall-clock.
+2. **Run parallel slots.** Batching amortizes weight reads across concurrent
+   sequences, which on a bandwidth-bound machine is close to free throughput.
+   Expect roughly 3–4× aggregate over single-stream.
+
+### Revised throughput estimate
+
+With prefix reuse and ~4–8 parallel slots, a full 2026 backfill (~3,000
+document-versions × 4 passes + verification) lands in the region of **1–3 days**
+of continuous compute. Daily incremental during session is **well under an
+hour**. Both need a benchmark spike to firm up — treat these as planning
+numbers, not measurements.
+
+**One practical caveat:** this is a laptop. A 48-hour flat-out backfill means
+sustained thermal load and a machine you can't really use for anything else.
+Schedule backfills overnight or across a weekend, make the pipeline checkpoint
+and resume cleanly (it should anyway), and expect to re-run it whenever you
+change a prompt — which you will, often.
+
+### Design implications for small models
+
+The open-source goal means contributors will run 3B models on laptops far
+weaker than yours. That is a real constraint, not a nice-to-have:
+
+- **Section-aware chunking with map-reduce.** Long bills exceed any practical
+  context window; the General Appropriations Act runs to hundreds of pages.
+  Chunk on the bill's own section structure, never on arbitrary token counts.
+- **Grammar-constrained JSON output** (llama.cpp GBNF, MLX equivalents). Small
+  models are unreliable at free-form JSON and completely reliable when the
+  decoder cannot emit invalid output. Highest-leverage small-model technique
+  there is.
 - **A pluggable backend interface** — `analyze(bill) -> AnalysisBundle` — with
-  implementations for llama.cpp, Ollama, vLLM, and OpenAI-compatible / Anthropic
-  APIs. The cloud-API option falls out of this for free.
-- **Named model profiles** (`tiny-3b`, `local-8b`, `local-32b`, `cloud`) that vary
-  chunk size, pass count, and self-check depth. A contributor on a 3B model should
-  get degraded-but-honest output, not garbage — and the verification pass should
-  *tell* them when quality dropped below threshold rather than silently publishing.
-- **Publish the eval harness.** With 2026 as ground truth, "does this model produce
-  acceptable analyses?" becomes a command anyone can run. That's what makes the
-  multi-model promise credible instead of aspirational.
-
----
+  implementations for llama.cpp, MLX, Ollama, and OpenAI-compatible/Anthropic
+  APIs. The optional cloud-API path falls out of this for free.
+- **Named model profiles** (`tiny-3b`, `local-8b`, `local-30b-moe`, `cloud`)
+  varying chunk size, pass count, and self-check depth. A contributor on a 3B
+  model should get degraded-but-honest output, and the verification pass should
+  *tell* them quality dropped below threshold rather than silently publishing.
+- **Publish the eval harness.** With 2026 as ground truth, "is this model good
+  enough?" becomes a command anyone can run. That is what makes the
+  multi-model promise credible rather than aspirational.
 
 ## 8. Risks
 
@@ -347,8 +386,6 @@ separate from the analysis layer, which costs nothing to do from the start.
 
 ## 11. Open questions
 
-- **AI box specs?** GPU + VRAM drives everything in §7.
-- **License?** See above.
 - **Editorial posture:** does anything publish automatically, or does a human
   approve the first N analyses? Recommendation: human-in-the-loop for the first
   session, automated after, with the predictive section gated longer than the rest.

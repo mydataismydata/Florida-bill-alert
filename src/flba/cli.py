@@ -133,9 +133,16 @@ def cmd_docs(args) -> int:
     jobs = []
 
     if "text" in args.kinds:
-        q = ("SELECT url FROM bill_text WHERE session=? AND fmt='HTML'"
-             if not args.text_pdf else
-             "SELECT url FROM bill_text WHERE session=?")
+        # Senate text is HTML (with Insert/Remove markup); House text is
+        # PDF-only. Take HTML where it exists and fall back to PDF, so every
+        # version is captured exactly once.
+        q = """SELECT url FROM bill_text t WHERE session=? AND (
+                   fmt='HTML' OR NOT EXISTS (
+                       SELECT 1 FROM bill_text h
+                       WHERE h.session=t.session AND h.num=t.num
+                         AND h.version=t.version AND h.fmt='HTML'))"""
+        if args.text_pdf:
+            q = "SELECT url FROM bill_text WHERE session=?"
         jobs += [("text", r["url"]) for r in db.execute(q, (args.session,))]
     if "analyses" in args.kinds:
         jobs += [("analysis", r["url"]) for r in
