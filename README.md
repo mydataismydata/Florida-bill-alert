@@ -59,14 +59,21 @@ Florida bills and statutes are government edicts and are in the public domain.
 
 ```
 python3.11 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
+export PYTHONPATH=src
 
-PYTHONPATH=src ./.venv/bin/python -m flba --session 2026 enumerate
-PYTHONPATH=src ./.venv/bin/python -m flba --session 2026 bills
-PYTHONPATH=src ./.venv/bin/python -m flba --session 2026 docs
-PYTHONPATH=src ./.venv/bin/python -m flba --session 2026 status
+./.venv/bin/python -m flba --session 2026 enumerate
+./.venv/bin/python -m flba --session 2026 bills --limit 200 --order activity
+./.venv/bin/python -m flba --session 2026 docs  --limit 500
+./.venv/bin/python -m flba --session 2026 bill 797 --with-docs
+./.venv/bin/python -m flba --session 2026 status
 ```
 
-Every stage is resumable and skips anything already in the cache.
+Every stage is resumable and skips anything already cached, so a backfill runs
+in short chunks rather than one long session. Single bills can be pulled or
+refreshed on demand at any time, including while a backfill is running.
+
+Full instructions, including the MLX model setup, are in
+[docs/SETUP.md](docs/SETUP.md).
 
 ## License
 

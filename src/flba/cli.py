@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -25,6 +26,32 @@ def _paths(session: str):
     return (PoliteFetcher(DATA / "raw" / "flsenate"),
             Store(DATA / "index.sqlite"),
             DATA / "index" / f"{session}.json")
+
+
+DEAD_MARKERS = ("died", "withdrawn", "indefinitely postponed",
+                "laid on table", "failed to pass", "vetoed")
+
+
+def is_dead(last_action: str) -> bool:
+    la = (last_action or "").lower()
+    return any(m in la for m in DEAD_MARKERS)
+
+
+ORDER_SQL = {
+    # most-worked bills first: versions + analyses + votes + amendments
+    "activity": """
+        SELECT b.num FROM bill b LEFT JOIN (
+            SELECT session,num,COUNT(*) n FROM bill_text GROUP BY session,num) t
+              ON t.session=b.session AND t.num=b.num
+        LEFT JOIN (SELECT session,num,COUNT(*) n FROM analysis GROUP BY session,num) a
+              ON a.session=b.session AND a.num=b.num
+        LEFT JOIN (SELECT session,num,COUNT(*) n FROM vote GROUP BY session,num) v
+              ON v.session=b.session AND v.num=b.num
+        WHERE b.session=?
+        ORDER BY (COALESCE(t.n,0)+COALESCE(a.n,0)+COALESCE(v.n,0)) DESC, b.num
+    """,
+    "number": "SELECT num FROM bill WHERE session=? ORDER BY num",
+}
 
 
 class Progress:
@@ -97,6 +124,8 @@ def cmd_bills(args) -> int:
         return 2
 
     bills = json.loads(index_path.read_text())["bills"]
+    if args.order == "live":
+        bills.sort(key=lambda b: (is_dead(b.get("last_action", "")), b["num"]))
     if args.limit:
         bills = bills[:args.limit]
     done = set() if args.refresh else store.known_bill_nums(args.session)
@@ -124,6 +153,51 @@ def cmd_bills(args) -> int:
     print(f"\nbills: done. failures={len(failures)}")
     for num, why in failures[:25]:
         print(f"  {num}: {why}")
+    return 1 if failures else 0
+
+
+def cmd_bill(args) -> int:
+    """Pull or refresh specific bills on demand, without touching the rest."""
+    fetcher, store, _ = _paths(args.session)
+    nums, failures = [], []
+    for tok in args.numbers:                      # accepts 797 or "HB 797"
+        m = re.search(r"(\d+)", tok)
+        if m:
+            nums.append(int(m.group(1)))
+        else:
+            print(f"  skipping unparseable bill id {tok!r}")
+
+    for num in nums:
+        url = f"https://www.flsenate.gov/Session/Bill/{args.session}/{num}"
+        res = fetcher.fetch(url, force=not args.cached)
+        store.log_fetch(res)
+        if not res.ok:
+            failures.append((num, f"HTTP {res.status}"))
+            print(f"  {num}: HTTP {res.status}")
+            continue
+        rec = flsenate.parse_bill_page(res.text(), args.session, num)
+        store.save_bill(rec)
+        state = "DEAD" if is_dead(rec.get("last_action", "")) else "live"
+        print(f"  {rec['label']:14} [{state}] {rec['title'][:52]}")
+        print(f"    {len(rec['history'])} events, {len(rec['texts'])} text rows, "
+              f"{len(rec['analyses'])} analyses, {len(rec['amendments'])} amendments")
+
+        if args.with_docs:
+            urls = [t["url"] for t in rec["texts"]
+                    if t["fmt"] == "HTML" or not any(
+                        o["version"] == t["version"] and o["fmt"] == "HTML"
+                        for o in rec["texts"])]
+            urls += [a["url"] for a in rec["analyses"]]
+            for u in urls:
+                d = fetcher.fetch(u, force=not args.cached)
+                store.log_fetch(d)
+                if not d.ok:
+                    failures.append((num, f"doc HTTP {d.status}"))
+            print(f"    fetched {len(urls)} documents")
+
+    store.commit()
+    if failures:
+        print(f"\nfailures: {len(failures)}")
     return 1 if failures else 0
 
 
@@ -160,6 +234,15 @@ def cmd_docs(args) -> int:
         if url and url not in seen:
             seen.add(url)
             uniq.append((kind, url))
+
+    if args.order in ORDER_SQL:
+        rank = {r["num"]: i for i, r in
+                enumerate(db.execute(ORDER_SQL[args.order], (args.session,)))}
+        keyof = lambda u: rank.get(
+            int(re.search(r"/Bill/[^/]+/(\d+)/", u).group(1))
+            if re.search(r"/Bill/[^/]+/(\d+)/", u) else -1, 1 << 30)
+        uniq.sort(key=lambda kv: keyof(kv[1]))
+
     if args.limit:
         uniq = uniq[:args.limit]
 
@@ -217,13 +300,27 @@ def main(argv=None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     for name, fn in (("enumerate", cmd_enumerate), ("bills", cmd_bills),
-                     ("docs", cmd_docs), ("status", cmd_status)):
+                     ("bill", cmd_bill), ("docs", cmd_docs),
+                     ("status", cmd_status)):
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
         sp.add_argument("--refresh", action="store_true",
                         help="re-fetch even if cached")
+        if name == "bill":
+            sp.add_argument("numbers", nargs="+",
+                            help="bill numbers, e.g. 797 or 'HB 797'")
+            sp.add_argument("--with-docs", action="store_true",
+                            help="also fetch this bill's text and analyses")
+            sp.add_argument("--cached", action="store_true",
+                            help="use the cache instead of re-fetching")
         if name in ("bills", "docs"):
-            sp.add_argument("--limit", type=int, default=0)
+            sp.add_argument("--limit", type=int, default=0,
+                            help="stop after N items -- use this to run the "
+                                 "backfill in short chunks")
+            sp.add_argument("--order", default="number",
+                            choices=["number", "live", "activity"],
+                            help="live: undead bills first; "
+                                 "activity: most-worked bills first")
         if name == "docs":
             sp.add_argument("--kinds", default="text,analyses",
                             type=lambda v: set(v.split(",")))

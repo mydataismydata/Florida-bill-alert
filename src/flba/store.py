@@ -96,10 +96,17 @@ class Store:
     def __init__(self, db_path: Path):
         self.path = Path(db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.path)
+        # An ad-hoc single-bill pull may run alongside a scheduled backfill.
+        # WAL lets them read concurrently; busy_timeout makes the second writer
+        # wait its turn instead of failing outright.
+        # isolation_level=None -> autocommit. Without it, Python holds a write
+        # transaction open across a whole batch of fetches (~100s), which no
+        # busy_timeout can outwait.
+        self.db = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=NORMAL")
+        self.db.execute("PRAGMA busy_timeout=30000")
         self.db.executescript(SCHEMA)
         self.db.commit()
 
@@ -112,6 +119,7 @@ class Store:
 
     def save_bill(self, rec: dict) -> None:
         s, n = rec["session"], rec["num"]
+        self.db.execute("BEGIN IMMEDIATE")   # one short, atomic write
         self.db.execute(
             "INSERT OR REPLACE INTO bill"
             " (session,num,label,chamber,title,long_title,subject,sponsor,"
@@ -165,6 +173,7 @@ class Store:
                 "INSERT OR REPLACE INTO related VALUES (?,?,?,?,?,?,?,?)",
                 (s, n, r["label"], r["subject"], r["filed_by"],
                  r["relationship"], r["status"], r["url"]))
+        self.db.execute("COMMIT")
 
     def known_bill_nums(self, session: str) -> set:
         rows = self.db.execute(
@@ -172,4 +181,4 @@ class Store:
         return {r["num"] for r in rows}
 
     def commit(self):
-        self.db.commit()
+        pass          # autocommit: every write lands as it is made

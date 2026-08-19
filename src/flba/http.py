@@ -9,7 +9,9 @@ require a re-scrape -- that is the whole point of the raw cache.
 """
 from __future__ import annotations
 
+import fcntl
 import hashlib
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,7 +59,7 @@ class PoliteFetcher:
         self.cache_root = Path(cache_root)
         self.delay = delay
         self.timeout = timeout
-        self._last = 0.0
+        self._lock = self.cache_root / ".crawl-delay.lock"
         self.session = requests.Session()
         self.session.headers["User-Agent"] = USER_AGENT
         self.session.headers["Accept-Encoding"] = "gzip, deflate"
@@ -76,10 +78,32 @@ class PoliteFetcher:
         return self.cache_root.joinpath(*segs)
 
     def _wait(self) -> None:
-        gap = time.monotonic() - self._last
-        if gap < self.delay:
-            time.sleep(self.delay - gap)
-        self._last = time.monotonic()
+        """Hold the crawl delay ACROSS processes.
+
+        An ad-hoc single-bill pull may well run while a scheduled backfill is
+        going. A per-process timer would let the two of them together hit the
+        site at twice the rate we promised, so the last-request timestamp lives
+        in a lock file shared by every fetcher against this cache.
+        """
+        self._lock.parent.mkdir(parents=True, exist_ok=True)
+        with open(self._lock, "a+") as fh:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+            try:
+                fh.seek(0)
+                try:
+                    last = float(fh.read().strip() or 0)
+                except ValueError:
+                    last = 0.0
+                gap = time.time() - last
+                if 0 <= gap < self.delay:
+                    time.sleep(self.delay - gap)
+                fh.seek(0)
+                fh.truncate()
+                fh.write(str(time.time()))
+                fh.flush()
+                os.fsync(fh.fileno())
+            finally:
+                fcntl.flock(fh, fcntl.LOCK_UN)
 
     def fetch(self, url: str, force: bool = False, retries: int = 4) -> FetchResult:
         url = urljoin(BASE, url)
