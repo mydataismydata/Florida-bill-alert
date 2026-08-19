@@ -178,3 +178,13 @@ del { background: var(--del-bg); color: var(--del-ink);
   ins { text-decoration: underline; }
   del { text-decoration: line-through; }
 }
+
+/* outcome tiles double as filters */
+button.stat { font: inherit; text-align: left; cursor: pointer; width: 100%;
+  color: inherit; transition: border-color .12s, background .12s; }
+button.stat:hover { border-color: var(--accent); }
+button.stat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.stat.on { border-color: var(--accent); border-width: 2px;
+  padding: calc(.7rem - 1px) calc(.85rem - 1px); }
+button.stat.on b { color: var(--accent); }
+@media print { button.stat { cursor: auto; } }

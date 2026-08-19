@@ -144,6 +144,17 @@ OUTCOME_LABEL = {
     TO_BALLOT:  "Goes to the voters as a constitutional amendment",
 }
 
+# Terse forms for tiles and filter chips, where the full sentence is too long.
+OUTCOME_SHORT = {
+    PENDING:    "still moving",
+    LAW:        "became law",
+    VETOED:     "vetoed",
+    DIED:       "died",
+    SUPERSEDED: "superseded by companion",
+    ADOPTED:    "adopted",
+    TO_BALLOT:  "went to the ballot",
+}
+
 # "companion bill(s) passed, see CS/CS/HB 123 (Ch. 2026-45)"
 COMPANION = re.compile(
     r"companion bill\(s\) passed,\s*see\s+([A-Z/]*\s?[A-Z]{1,4}\s*\d+)", re.I)

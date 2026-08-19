@@ -74,7 +74,7 @@ def test_search_index_matches_the_pages_written(built):
     assert len(idx) == 40
     for row in idx:
         assert (out / "bills" / f"{row['n']}.html").exists()
-        assert set(row) == {"n", "l", "t", "o", "s"}
+        assert {"n", "l", "t", "o", "k", "s"} <= set(row)
 
 
 def test_changes_are_shown_inside_their_sentence(built):
@@ -106,6 +106,31 @@ def test_full_text_page_keeps_the_legislatures_line_numbers(built):
     numbered = [d for d in soup.select(".doc .ln") if d.get("id")]
     assert numbered, "lines must be anchorable for citation"
     assert numbered[0]["id"].startswith("L")
+
+
+def test_home_page_tiles_filter_the_bill_list(built):
+    """Each tile must name an outcome the index can actually filter on, or
+    clicking it silently yields nothing."""
+    from bs4 import BeautifulSoup
+    out, _ = built
+    soup = BeautifulSoup((out / "index.html").read_text(encoding="utf-8"), "lxml")
+    tiles = soup.select("#tiles .stat")
+    assert tiles, "no filter tiles rendered"
+    keys = {t["data-outcome"] for t in tiles}
+    assert "all" in keys
+    idx = json.loads((out / "search-index.json").read_text())
+    present = {b["k"] for b in idx}
+    assert (keys - {"all"}) <= present, "a tile filters on an unknown outcome"
+    assert len(soup.select("#tiles .stat.on")) == 1, "exactly one tile starts active"
+
+
+def test_bill_list_renders_without_javascript(built):
+    from bs4 import BeautifulSoup
+    out, _ = built
+    soup = BeautifulSoup((out / "index.html").read_text(encoding="utf-8"), "lxml")
+    rows = soup.select("#bills tbody tr")
+    assert rows, "the default list must be server-rendered"
+    assert rows[0].find("a")["href"].startswith("bills/")
 
 
 def test_a_bill_page_carries_its_outcome_and_pathway(built):

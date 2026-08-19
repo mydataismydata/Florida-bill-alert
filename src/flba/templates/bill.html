@@ -26,10 +26,10 @@
   </table>
 </div>
 
-{% if b.long_title %}<h2>What it says it does</h2>
+{% if b.long_title %}<h2>Provided summary</h2>
 <p>{{ b.long_title }}</p>{% endif %}
 
-<h2>How far it got</h2>
+<h2>Timeline</h2>
 <ol class="path">
 {% for s in path|reverse %}
   <li class="{% if s.current %}done now{% elif s.reached %}done{% else %}todo{% endif %}">
@@ -56,7 +56,7 @@
 {% endif %}
 
 {% if blocks %}
-<h2>What the text changes</h2>
+<h2>Text revisions</h2>
 <p class="legend"><span class="k a">Underlined</span> language is being added;
    <span class="k d">struck</span> language is being deleted. Each passage is
    shown as it reads in the bill. {{ stats.words_inserted }} words added,

@@ -5,27 +5,29 @@
 <p class="sub">Every bill, how far it got, and exactly which words it changed —
    read mechanically from the official record.</p>
 
-<div class="stats">
-  <div class="stat"><b>{{ bill_count }}</b><span>bills filed</span></div>
+<div class="stats" id="tiles">
+  <button class="stat" data-outcome="all" data-noun="all bills" type="button">
+    <b>{{ bill_count }}</b><span>bills filed</span></button>
   {% for o in outcomes %}
-  <div class="stat"><b>{{ o.n }}</b><span>{{ o.label|lower }}</span></div>
+  <button class="stat{{ ' on' if o.key == default_outcome }}" data-outcome="{{ o.key }}"
+          data-noun="{{ o.label }}" type="button">
+    <b>{{ o.n }}</b><span>{{ o.label }}</span></button>
   {% endfor %}
 </div>
 
-<h2>Find a bill</h2>
-<label for="q" class="meta">Search by number, title, or sponsor</label>
+<h2>Bills</h2>
+<label for="q" class="meta">Search by number, title, or sponsor — or pick a
+  category above</label>
 <input type="search" id="q" placeholder="e.g. 1452, public records, Gaetz" autocomplete="off">
-<div id="results"></div>
-<p class="more" id="hint">Searching all {{ bill_count }} bills.</p>
+<p class="more" id="hint">Showing {{ enacted|length }} bills — became law.</p>
 
-<h2>Bills that became law</h2>
-<div class="scroll"><table>
-<thead><tr><th>Bill</th><th>Title</th><th>Chapter</th></tr></thead>
+<div class="scroll"><table id="bills">
+<thead><tr><th>Bill</th><th>Title</th><th>Outcome</th></tr></thead>
 <tbody>{% for b in enacted %}
 <tr>
   <td class="num"><a href="bills/{{ b.num }}.html">{{ b.label }}</a></td>
   <td>{{ b.title|truncate(88) }}</td>
-  <td class="num">{{ b.chapter_law }}</td>
+  <td>Became law{% if b.chapter_law %} <span class="meta">Ch. {{ b.chapter_law }}</span>{% endif %}</td>
 </tr>{% endfor %}</tbody></table></div>
 
 <h2>Most-changed statutes</h2>
@@ -42,36 +44,81 @@
 
 <script>
 (function () {
-  var q = document.getElementById('q'), out = document.getElementById('results'),
-      hint = document.getElementById('hint'), data = null, timer = null;
+  var CAP = 400, DEFAULT = {{ default_outcome|tojson }};
+  var q = document.getElementById('q'), hint = document.getElementById('hint'),
+      body = document.querySelector('#bills tbody'),
+      tiles = document.getElementById('tiles'),
+      data = null, timer = null,
+      state = { q: '', outcome: DEFAULT };
+
   function load() {
-    if (data) return Promise.resolve(data);
-    return fetch('search-index.json').then(function (r) { return r.json(); })
-      .then(function (j) { data = j; return j; });
+    return data ? Promise.resolve(data)
+      : fetch('search-index.json').then(function (r) { return r.json(); })
+          .then(function (j) { data = j; return j; });
   }
-  function render(rows, term) {
-    if (!term) { out.innerHTML = ''; hint.textContent = 'Searching all ' + data.length + ' bills.'; return; }
-    if (!rows.length) { out.innerHTML = ''; hint.textContent = 'No bill matches “' + term + '”.'; return; }
-    var shown = rows.slice(0, 60), h = '<div class="scroll"><table><thead><tr>' +
-      '<th>Bill</th><th>Title</th><th>Outcome</th></tr></thead><tbody>';
-    for (var i = 0; i < shown.length; i++) {
-      var b = shown[i];
-      h += '<tr><td class="num"><a href="bills/' + b.n + '.html">' + b.l +
-           '</a></td><td>' + b.t + '</td><td>' + b.o + '</td></tr>';
-    }
-    out.innerHTML = h + '</tbody></table></div>';
-    hint.textContent = rows.length > shown.length
-      ? 'Showing 60 of ' + rows.length + ' matches — narrow the search to see more.'
-      : rows.length + ' match' + (rows.length === 1 ? '' : 'es') + '.';
-  }
-  function run() {
-    var term = q.value.trim().toLowerCase();
-    load().then(function (rows) {
-      if (!term) return render([], '');
-      render(rows.filter(function (b) { return b.s.indexOf(term) !== -1; }), term);
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
     });
   }
-  q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(run, 120); });
+  function noun(o) {
+    var t = tiles.querySelector('[data-outcome="' + o + '"]');
+    return t ? t.getAttribute('data-noun') : o;
+  }
+  function draw(rows) {
+    var shown = rows.slice(0, CAP), html = '';
+    for (var i = 0; i < shown.length; i++) {
+      var b = shown[i];
+      html += '<tr><td class="num"><a href="bills/' + b.n + '.html">' + esc(b.l) +
+        '</a></td><td>' + esc(b.t) + '</td><td>' + esc(b.o) +
+        (b.c ? ' <span class="meta">Ch. ' + esc(b.c) + '</span>' : '') + '</td></tr>';
+    }
+    body.innerHTML = html;
+
+    var what = noun(state.outcome), match = state.q ? ' matching “' + state.q + '”' : '';
+    if (!rows.length) {
+      hint.textContent = 'No bills' + match + ' in ' + what + '.';
+    } else if (rows.length > shown.length) {
+      hint.textContent = 'Showing ' + CAP + ' of ' + rows.length + ' bills' +
+        match + ' — ' + what + '. Narrow the search to see more.';
+    } else {
+      hint.textContent = 'Showing ' + rows.length + ' bill' +
+        (rows.length === 1 ? '' : 's') + match + ' — ' + what + '.';
+    }
+  }
+  function apply() {
+    load().then(function (rows) {
+      draw(rows.filter(function (b) {
+        return (state.outcome === 'all' || b.k === state.outcome) &&
+               (!state.q || b.s.indexOf(state.q) !== -1);
+      }));
+    });
+  }
+  function select(outcome, push) {
+    state.outcome = outcome;
+    var all = tiles.querySelectorAll('.stat');
+    for (var i = 0; i < all.length; i++) {
+      all[i].classList.toggle('on', all[i].getAttribute('data-outcome') === outcome);
+    }
+    if (push) {
+      history.replaceState(null, '', outcome === DEFAULT ? location.pathname : '#' + outcome);
+    }
+    apply();
+  }
+
+  tiles.addEventListener('click', function (e) {
+    var btn = e.target.closest('.stat');
+    if (btn) select(btn.getAttribute('data-outcome'), true);
+  });
+  q.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () { state.q = q.value.trim().toLowerCase(); apply(); }, 120);
+  });
+
+  var fromHash = location.hash.replace('#', '');
+  if (fromHash && tiles.querySelector('[data-outcome="' + fromHash + '"]')) {
+    select(fromHash, false);
+  }
 })();
 </script>
 {% endblock %}

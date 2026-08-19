@@ -120,12 +120,15 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
             analyses=analyses, history=history.get(b["num"], []), **common)
         (out / "bills" / f"{b['num']}.html").write_text(html, encoding="utf-8")
 
-        index_rows.append({
+        row = {
             "n": b["num"], "l": b["label"], "t": (b["title"] or "")[:120],
-            "o": prog.outcome_label,
+            "o": prog.outcome_label, "k": prog.outcome,
             "s": " ".join(filter(None, [
                 b["label"], b["title"], b["sponsor"], b["cosponsors"]])).lower(),
-        })
+        }
+        if b["chapter_law"]:
+            row["c"] = b["chapter_law"]
+        index_rows.append(row)
         if b["chapter_law"]:
             enacted.append(b)
         if i % 400 == 0:
@@ -183,12 +186,15 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     # ------------------------------------------------------- front and about
     order = ["became_law", "died", "superseded", "adopted", "vetoed",
              "pending", "to_ballot"]
-    from .stages import OUTCOME_LABEL
-    outcome_cards = [{"label": OUTCOME_LABEL[k], "n": outcomes[k]}
+    from .stages import OUTCOME_SHORT
+    outcome_cards = [{"key": k, "label": OUTCOME_SHORT[k], "n": outcomes[k]}
                      for k in order if outcomes.get(k)]
+    # the pre-rendered table is what a reader without JavaScript sees
+    default_outcome = ("became_law" if outcomes.get("became_law")
+                       else (outcome_cards[0]["key"] if outcome_cards else "all"))
 
     (out / "index.html").write_text(env.get_template("index.html").render(
-        root="", outcomes=outcome_cards,
+        root="", outcomes=outcome_cards, default_outcome=default_outcome,
         enacted=sorted(enacted, key=lambda b: b["num"]),
         top_statutes=stat_rows[:10], **common), encoding="utf-8")
 
