@@ -109,12 +109,34 @@ The fix is map-reduce over the bill's own sections, which the corpus supports:
 **11,547 sections, median 1,042 characters, 97.6% under 3,000 tokens.** Each
 section maps to one statute, so it is a natural unit of meaning. Not built yet.
 
+## What verification actually catches
+
+Across the first eleven bills analysed, **14 of 98 claims were discarded
+because their quote could not be found in the bill** — a 85.7% verification
+rate. Spot-checking the failures showed they are real, not pedantry:
+
+- One quote — *"within 500 feet of a place where children were congregating"* —
+  matched **zero characters** of the bill. Entirely invented.
+- Most others opened correctly and then drifted mid-quote, the model stitching
+  across a gap or paraphrasing the tail.
+
+So roughly one claim in seven would otherwise have been published with
+fabricated supporting evidence. This single check does more for credibility
+than any amount of prompt wording.
+
+The failures were nearly all *long* quotes, so quotes are now capped at 180
+characters with instructions to prefer a short exact span. That alone moved
+the rate from 81.4% to 85.7%, and on the four worst bills from 67.6% to 80.0%.
+
+**Verification rate is the metric to watch as this scales** — not how well any
+single bill reads.
+
 ## Not yet evaluated
 
-Output has been read closely on a handful of bills and is good on those. That
-is an anecdote, not a measurement, and output varies between runs more than
-temperature 0 suggests, because a schema change alters the token stream.
+Eleven bills is enough to measure the verification rate and not much else.
+Output also varies between runs more than temperature 0 suggests, because a
+schema change alters the token stream.
 
-The corpus already contains the ground truth for a real evaluation: **890 bills
+The corpus already contains ground truth for a real evaluation: **890 bills
 carry committee staff analyses written by people who read the same text.**
 Until that comparison exists, treat the quality claims here as unproven.

@@ -15,12 +15,21 @@ from __future__ import annotations
 # one-character strings are both legal JSON; length floors are what stop the
 # model taking that exit when it is unsure. Item-count floors are worse -- they
 # force invention on genuinely trivial bills, which is the failure that matters.
+# Long quotes drift. Measured over eleven bills, the quotes that failed
+# verification were nearly all long ones that began correctly and then
+# wandered -- the model stitching across a gap or paraphrasing the tail. A
+# short contiguous span is both easier to copy exactly and easier for a reader
+# to find, so the ceiling is part of the contract.
 QUOTE = {
     "type": "string",
     "minLength": 25,
-    "description": ("A span of OPERATIVE language copied EXACTLY from the bill "
-                    "text, without the [[+ +]] or [[- -]] markers. Not the bill "
-                    "title. 4 to 40 words."),
+    "maxLength": 180,
+    "description": ("A SHORT contiguous span of operative language copied "
+                    "EXACTLY from the bill text, without the [[+ +]] or "
+                    "[[- -]] markers. 6 to 25 words. Do not join text from two "
+                    "places, do not trim words from the middle, and do not "
+                    "quote the bill title. If you cannot copy it exactly, "
+                    "choose a shorter span you can."),
 }
 
 SUMMARY = {

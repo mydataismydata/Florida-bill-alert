@@ -36,6 +36,10 @@ scanning this between meetings, not studying it. Long dense paragraphs are a \
 failure even when every word is accurate.
 - Every quote must be copied EXACTLY from the bill text, with no [[+ +]] or \
 [[- -]] markers, and must be a span you can point to.
+- Keep quotes SHORT -- 6 to 25 words of contiguous text. Never join two \
+passages into one quote and never drop words from the middle. A short exact \
+quote is worth more than a long approximate one; a quote that is not \
+word-for-word will be discarded and your claim lost with it.
 - [[+text+]] is language being ADDED to Florida law. [[-text-]] is language \
 being DELETED from it. What a bill deletes is often more consequential than \
 what it adds.
