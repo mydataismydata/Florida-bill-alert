@@ -31,7 +31,7 @@
 
 <h2>How far it got</h2>
 <ol class="path">
-{% for s in path %}
+{% for s in path|reverse %}
   <li class="{% if s.current %}done now{% elif s.reached %}done{% else %}todo{% endif %}">
     {{ s.label }}{% if s.date %}<span class="when">{{ s.date }}</span>{% endif %}
   </li>
@@ -85,7 +85,7 @@
 <h2>History</h2>
 <div class="scroll"><table>
 <thead><tr><th>Date</th><th>Chamber</th><th>Action</th></tr></thead>
-<tbody>{% for h in history %}
+<tbody>{% for h in history|reverse %}
 <tr><td class="num">{{ h.date }}</td><td>{{ h.chamber }}</td><td>{{ h.action }}</td></tr>
 {% endfor %}</tbody></table></div>
 {% endblock %}

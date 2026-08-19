@@ -67,7 +67,10 @@ h3 { font-size: 1rem; margin: 1.4rem 0 .5rem; }
 ol.path { list-style: none; margin: .4rem 0 0; padding: 0; }
 ol.path li { position: relative; padding: 0 0 .85rem 1.7rem;
   border-left: 2px solid var(--line); margin-left: .45rem; }
-ol.path li:last-child { border-left-color: transparent; padding-bottom: 0; }
+ol.path li:last-child { padding-bottom: 0; }
+/* the ladder reads newest-first, so the run of connector line stops at the
+   oldest step, which is now the last one rendered */
+ol.path li:last-child { border-left-color: transparent; }
 ol.path li::before {
   content: ""; position: absolute; left: -.46rem; top: .35rem;
   width: .8rem; height: .8rem; border-radius: 50%;
