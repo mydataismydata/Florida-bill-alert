@@ -1,0 +1,175 @@
+"""SQLite index over the raw cache.
+
+The raw files on disk are the system of record. This database is a derived
+index -- it can always be rebuilt by reparsing the cache, offline.
+"""
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS fetch (
+    url          TEXT PRIMARY KEY,
+    path         TEXT NOT NULL,
+    status       INTEGER,
+    content_type TEXT,
+    nbytes       INTEGER,
+    sha256       TEXT,
+    fetched_at   TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS bill (
+    session      TEXT NOT NULL,
+    num          INTEGER NOT NULL,      -- the number in the URL path
+    label        TEXT,                  -- 'SB 2' / 'HB 1001'
+    chamber      TEXT,
+    title        TEXT,
+    long_title   TEXT,
+    subject      TEXT,                  -- e.g. 'CLAIM/GENERAL'
+    sponsor      TEXT,
+    cosponsors   TEXT,
+    sponsor_url  TEXT,
+    chapter_law  TEXT,
+    chapter_law_url TEXT,
+    effective_date TEXT,
+    last_action  TEXT,
+    url          TEXT,
+    parsed_at    TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (session, num)
+);
+
+CREATE TABLE IF NOT EXISTS history (
+    session TEXT, num INTEGER, seq INTEGER,
+    date TEXT, chamber TEXT, action TEXT,
+    PRIMARY KEY (session, num, seq)
+);
+
+CREATE TABLE IF NOT EXISTS committee_ref (
+    session TEXT, num INTEGER, seq INTEGER,
+    chamber TEXT, name TEXT, code TEXT,
+    PRIMARY KEY (session, num, chamber, seq)
+);
+
+CREATE TABLE IF NOT EXISTS bill_text (
+    session TEXT, num INTEGER, version TEXT, posted TEXT,
+    fmt TEXT, url TEXT,
+    PRIMARY KEY (session, num, version, fmt)
+);
+
+CREATE TABLE IF NOT EXISTS analysis (
+    session TEXT, num INTEGER, kind TEXT, analysis TEXT,
+    author TEXT, posted TEXT, url TEXT,
+    PRIMARY KEY (session, num, url)
+);
+
+CREATE TABLE IF NOT EXISTS vote (
+    session TEXT, num INTEGER, scope TEXT, version TEXT,
+    committee TEXT, date TEXT, result TEXT, url TEXT,
+    PRIMARY KEY (session, num, url)
+);
+
+CREATE TABLE IF NOT EXISTS amendment (
+    session TEXT, num INTEGER, scope TEXT, version TEXT, number TEXT,
+    kind TEXT, description TEXT, filed_by TEXT, posted TEXT,
+    action TEXT, url TEXT,
+    PRIMARY KEY (session, num, scope, number)
+);
+
+CREATE TABLE IF NOT EXISTS citation (
+    session TEXT, num INTEGER, kind TEXT, cite TEXT, url TEXT,
+    PRIMARY KEY (session, num, kind, cite)
+);
+
+CREATE TABLE IF NOT EXISTS related (
+    session TEXT, num INTEGER, label TEXT, subject TEXT,
+    filed_by TEXT, relationship TEXT, status TEXT, url TEXT,
+    PRIMARY KEY (session, num, label, relationship)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bill_session ON bill(session);
+CREATE INDEX IF NOT EXISTS idx_hist_bill    ON history(session, num);
+"""
+
+
+class Store:
+    def __init__(self, db_path: Path):
+        self.path = Path(db_path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.db = sqlite3.connect(self.path)
+        self.db.row_factory = sqlite3.Row
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute("PRAGMA synchronous=NORMAL")
+        self.db.executescript(SCHEMA)
+        self.db.commit()
+
+    def log_fetch(self, r) -> None:
+        self.db.execute(
+            "INSERT OR REPLACE INTO fetch (url,path,status,content_type,nbytes,sha256)"
+            " VALUES (?,?,?,?,?,?)",
+            (r.url, str(r.path), r.status, r.content_type, r.nbytes, r.sha256),
+        )
+
+    def save_bill(self, rec: dict) -> None:
+        s, n = rec["session"], rec["num"]
+        self.db.execute(
+            "INSERT OR REPLACE INTO bill"
+            " (session,num,label,chamber,title,long_title,subject,sponsor,"
+            "  cosponsors,sponsor_url,chapter_law,chapter_law_url,"
+            "  effective_date,last_action,url)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (s, n, rec.get("label"), rec.get("chamber"), rec.get("title"),
+             rec.get("long_title"), rec.get("subject"), rec.get("sponsor"),
+             rec.get("cosponsors"), rec.get("sponsor_url"),
+             rec.get("chapter_law"), rec.get("chapter_law_url"),
+             rec.get("effective_date"), rec.get("last_action"), rec.get("url")),
+        )
+        wipe = ("history", "committee_ref", "bill_text", "analysis",
+                "vote", "amendment", "citation", "related")
+        for tbl in wipe:
+            self.db.execute(f"DELETE FROM {tbl} WHERE session=? AND num=?", (s, n))
+
+        for i, h in enumerate(rec.get("history", [])):
+            self.db.execute(
+                "INSERT OR REPLACE INTO history VALUES (?,?,?,?,?,?)",
+                (s, n, i, h["date"], h["chamber"], h["action"]))
+        for c in rec.get("committee_refs", []):
+            self.db.execute(
+                "INSERT OR REPLACE INTO committee_ref VALUES (?,?,?,?,?,?)",
+                (s, n, c["seq"], c["chamber"], c["name"], c["code"]))
+        for t in rec.get("texts", []):
+            self.db.execute(
+                "INSERT OR REPLACE INTO bill_text VALUES (?,?,?,?,?,?)",
+                (s, n, t["version"], t["posted"], t["fmt"], t["url"]))
+        for a in rec.get("analyses", []):
+            self.db.execute(
+                "INSERT OR REPLACE INTO analysis VALUES (?,?,?,?,?,?,?)",
+                (s, n, a["kind"], a["analysis"], a["author"], a["posted"], a["url"]))
+        for v in rec.get("votes", []):
+            self.db.execute(
+                "INSERT OR REPLACE INTO vote VALUES (?,?,?,?,?,?,?,?)",
+                (s, n, v["scope"], v["version"], v["committee"], v["date"],
+                 v["result"], v["url"]))
+        for am in rec.get("amendments", []):
+            self.db.execute(
+                "INSERT OR REPLACE INTO amendment VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (s, n, am["scope"], am["version"], am["number"], am["kind"],
+                 am["description"], am["filed_by"], am["posted"],
+                 am["action"], am["url"]))
+        for c in rec.get("citations", []):
+            self.db.execute(
+                "INSERT OR REPLACE INTO citation VALUES (?,?,?,?,?)",
+                (s, n, c["kind"], c["cite"], c["url"]))
+        for r in rec.get("related", []):
+            self.db.execute(
+                "INSERT OR REPLACE INTO related VALUES (?,?,?,?,?,?,?,?)",
+                (s, n, r["label"], r["subject"], r["filed_by"],
+                 r["relationship"], r["status"], r["url"]))
+
+    def known_bill_nums(self, session: str) -> set:
+        rows = self.db.execute(
+            "SELECT num FROM bill WHERE session=?", (session,)).fetchall()
+        return {r["num"] for r in rows}
+
+    def commit(self):
+        self.db.commit()
