@@ -31,6 +31,9 @@ legislators voting on the bill, and members of the public petitioning them.
 Rules you must follow:
 - Use ONLY the bill text provided. If it does not say something, you do not know it.
 - Write plain English. No legalese, no hedging, no filler.
+- Write SHORT. One idea per sentence, one point per paragraph. A reader is \
+scanning this between meetings, not studying it. Long dense paragraphs are a \
+failure even when every word is accurate.
 - Every quote must be copied EXACTLY from the bill text, with no [[+ +]] or \
 [[- -]] markers, and must be a span you can point to.
 - [[+text+]] is language being ADDED to Florida law. [[-text-]] is language \
@@ -45,6 +48,9 @@ TASK summary
 Say what actually changes for people in practice, not what the bill is \
 "about". If it deletes an existing requirement, protection, or limit, say so \
 plainly -- that is usually the most important thing about a bill.
+
+Give two to four SHORT paragraphs of 25-45 words, one point each. Do not \
+write a single long block.
 
 TASK provisions
 List the provisions that matter, most important first. Include a provision \

@@ -29,9 +29,19 @@ SUMMARY = {
     "properties": {
         "one_line": {"type": "string", "minLength": 40,
                      "description": "One sentence, under 25 words, plain English."},
-        "summary": {"type": "string", "minLength": 150,
-                    "description": "Two to four sentences in plain English. "
-                                   "No legal jargon. Say what changes in practice."},
+        # An array, not a string. Asked for "two to four sentences" the model
+        # returns one 200-word block, which is technically compliant and
+        # unreadable. Separate items render as separate paragraphs and force
+        # one idea each.
+        "summary": {
+            "type": "array", "minItems": 2, "maxItems": 4,
+            "items": {"type": "string", "minLength": 60, "maxLength": 400},
+            "description": ("Short paragraphs, ONE point each, 25-45 words. "
+                            "Start with what the bill does, then what it "
+                            "removes or restricts, then who decides what "
+                            "afterwards. Never combine points into one "
+                            "paragraph."),
+        },
         "who_is_affected": {
             "type": "array", "items": {"type": "string"},
             "description": "Groups of people or bodies directly affected.",

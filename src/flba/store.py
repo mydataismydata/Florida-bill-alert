@@ -275,7 +275,8 @@ class Store:
             "  failures,stats)"
             " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (a.session, a.num, a.version, a.model,
-             a.summary.get("one_line", ""), a.summary.get("summary", ""),
+             a.summary.get("one_line", ""),
+             j(a.summary.get("summary", [])),
              j(a.summary.get("who_is_affected", [])), a.reading,
              j(a.provisions), j(a.implications), j(a.unclear),
              j(a.dropped), j(a.flagged), j(a.failures), j(a.stats)))
@@ -289,8 +290,8 @@ class Store:
         if not row:
             return None
         out = dict(row)
-        for k in ("who_is_affected", "provisions", "implications", "unclear",
-                  "dropped", "flagged", "failures", "stats"):
+        for k in ("summary", "who_is_affected", "provisions", "implications",
+                  "unclear", "dropped", "flagged", "failures", "stats"):
             try:
                 out[k] = _json.loads(out[k] or "[]")
             except Exception:

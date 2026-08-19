@@ -45,8 +45,8 @@ def _load_ai(db, session, num):
     if not row:
         return None
     out = dict(row)
-    for key in ("who_is_affected", "provisions", "implications", "unclear",
-                "dropped", "flagged", "failures", "stats"):
+    for key in ("summary", "who_is_affected", "provisions", "implications",
+                "unclear", "dropped", "flagged", "failures", "stats"):
         try:
             out[key] = json.loads(out[key] or "[]")
         except Exception:

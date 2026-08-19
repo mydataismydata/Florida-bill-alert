@@ -565,7 +565,9 @@ def cmd_analyze(args) -> int:
         print(f"{bill['label']} — {bill['title']}")
         print(f"  model {rec['model']}, generated {rec['generated_at']}\n")
         print(f"  {rec['one_line']}\n")
-        print(f"  {rec['summary']}\n")
+        for para in (rec["summary"] if isinstance(rec["summary"], list)
+                     else [rec["summary"]]):
+            print(f"  {para}\n")
         if rec["who_is_affected"]:
             print("  AFFECTS: " + "; ".join(rec["who_is_affected"]) + "\n")
         if rec["provisions"]:

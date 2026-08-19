@@ -28,8 +28,8 @@
 
 {% if ai %}
 <section class="ai">
-  <h2>Plain-English analysis <span class="tag">AI-generated</span></h2>
-  <p class="ai-note">Written by a language model reading the bill text — not by
+  <h2 class="ai-head">Plain-English analysis <span class="tag">AI-generated</span></h2>
+  <p class="ai-note intro">Written by a language model reading the bill text — not by
      a person, and not reviewed by one. Every quotation below was checked
      against the bill automatically; anything the model asserted that could not
      be traced to the text was discarded before publication. It can still be
@@ -37,7 +37,7 @@
      read mechanically from the official record.</p>
 
   <p class="lede">{{ ai.one_line }}</p>
-  <p>{{ ai.summary }}</p>
+  {% for para in ai.summary %}<p>{{ para }}</p>{% endfor %}
 
   {% if ai.who_is_affected %}
   <h3>Who this affects</h3>
