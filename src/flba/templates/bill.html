@@ -172,7 +172,8 @@
 (function () {
   // Every row is in the page; the middle is folded away afterwards so the
   // history stays complete for printing, searching and readers without JS.
-  var KEEP_TOP = 2, KEEP_BOTTOM = 10;
+  // newest-first, so the top is recent activity and the tail is the filing
+  var KEEP_TOP = 10, KEEP_BOTTOM = 2;
   var rows = document.querySelectorAll('#history tbody tr');
   if (rows.length <= KEEP_TOP + KEEP_BOTTOM) return;
   var hidden = [], i;
