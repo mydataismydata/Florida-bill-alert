@@ -544,6 +544,98 @@ def cmd_build(args) -> int:
     return 0
 
 
+def cmd_analyze(args) -> int:
+    """Run the model over bills and store what survives verification."""
+    from .analysis.analyze import analyze
+    from .analysis.backend import Backend
+
+    _, store, _ = _paths(args.session)
+    db = store.db
+    backend = Backend(base_url=args.base_url, model=args.model,
+                      api_key=args.api_key)
+
+    if args.show:
+        num = int(re.search(r"(\d+)", args.show).group(1))
+        rec = store.load_analysis(args.session, num)
+        if not rec:
+            print(f"no analysis stored for bill {num}", file=sys.stderr)
+            return 2
+        bill = db.execute("SELECT label,title FROM bill WHERE session=? AND num=?",
+                          (args.session, num)).fetchone()
+        print(f"{bill['label']} — {bill['title']}")
+        print(f"  model {rec['model']}, generated {rec['generated_at']}\n")
+        print(f"  {rec['one_line']}\n")
+        print(f"  {rec['summary']}\n")
+        if rec["who_is_affected"]:
+            print("  AFFECTS: " + "; ".join(rec["who_is_affected"]) + "\n")
+        if rec["provisions"]:
+            print("  PROVISIONS")
+            for p in rec["provisions"]:
+                print(f"    [{p['significance']}] {p['heading']}"
+                      f"{' — s. ' + p['statute'] if p.get('statute') else ''}")
+                print(f"       {p['effect']}")
+                print(f"       “{p['quote'][:110]}” [{p['quote_status']}]")
+        if rec["implications"]:
+            print("\n  WHAT THE LANGUAGE PERMITS")
+            for i in rec["implications"]:
+                print(f"    [{i['certainty']}] {i['consequence']}")
+                print(f"       “{i['quote'][:110]}”")
+        if rec["unclear"]:
+            print("\n  LEFT UNCLEAR")
+            for u in rec["unclear"]:
+                print(f"    - {u}")
+        print(f"\n  stats: {rec['stats']}")
+        return 0
+
+    if not backend.available():
+        print(f"no model server at {args.base_url}\n"
+              f"start one with:\n"
+              f"  python -m mlx_vlm.server --model {args.model} --port 8080",
+              file=sys.stderr)
+        return 2
+
+    if args.number:
+        nums = [int(re.search(r"(\d+)", args.number).group(1))]
+    else:
+        done = set() if args.refresh else store.analysed_nums(args.session)
+        rows = db.execute(ORDER_SQL[args.order] if args.order in ORDER_SQL
+                          else ORDER_SQL["number"], (args.session,)).fetchall()
+        nums = [r["num"] for r in rows if r["num"] not in done]
+        if args.limit:
+            nums = nums[:args.limit]
+
+    print(f"analyze: {len(nums)} bill(s) via {args.model}")
+    prog, failed = Progress(len(nums), "analyze", every=5), 0
+    for num in nums:
+        try:
+            result = analyze(db, args.session, num, backend,
+                             log=(print if len(nums) == 1 else lambda *_: None))
+        except Exception as exc:
+            failed += 1
+            print(f"  {num}: {exc}")
+            prog.tick()
+            continue
+        if result is None:
+            failed += 1
+            prog.tick()
+            continue
+        store.save_analysis(result)
+        if len(nums) == 1:
+            print(f"\n  {result.summary.get('one_line','')}")
+            print(f"  stored. view with: flba --session {args.session} "
+                  f"analyze --show {num}")
+        prog.tick(f"{result.label} "
+                  f"({result.stats['claims_kept']} claims, "
+                  f"{result.stats['claims_dropped']} dropped)")
+
+    s = backend.stats
+    print(f"\nanalyze: done. failed={failed}")
+    print(f"  {s['calls']} calls, {s['cache_hits']} cache hits, "
+          f"{s['completion_tokens']:,} tokens generated, "
+          f"{s['seconds']/60:.1f} min")
+    return 1 if failed else 0
+
+
 def cmd_status(args) -> int:
     _, store, index_path = _paths(args.session)
     db, s = store.db, args.session
@@ -581,7 +673,8 @@ def main(argv=None) -> int:
                      ("bill", cmd_bill), ("docs", cmd_docs),
                      ("diff", cmd_diff), ("track", cmd_track),
                      ("crossref", cmd_crossref), ("statutes", cmd_statutes),
-                     ("build", cmd_build), ("status", cmd_status)):
+                     ("analyze", cmd_analyze), ("build", cmd_build),
+                     ("status", cmd_status)):
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
         sp.add_argument("--refresh", action="store_true",
@@ -612,6 +705,17 @@ def main(argv=None) -> int:
             sp.add_argument("--json", action="store_true")
         if name == "crossref":
             sp.add_argument("--limit", type=int, default=0)
+        if name == "analyze":
+            sp.add_argument("number", nargs="?", help="one bill number")
+            sp.add_argument("--show", help="print the stored analysis for a bill")
+            sp.add_argument("--limit", type=int, default=0,
+                            help="stop after N bills -- run in chunks")
+            sp.add_argument("--order", default="activity",
+                            choices=["number", "live", "activity"])
+            sp.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
+            sp.add_argument("--model",
+                            default="mlx-community/Qwen3.8-27B-4bit")
+            sp.add_argument("--api-key", default=None)
         if name == "build":
             sp.add_argument("--out", help="output directory (default ./site)")
             sp.add_argument("--limit", type=int, default=0)

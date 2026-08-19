@@ -39,6 +39,23 @@ def _rows(db, sql, *args):
     return db.execute(sql, args).fetchall()
 
 
+def _load_ai(db, session, num):
+    row = db.execute("SELECT * FROM analysis_ai WHERE session=? AND num=?",
+                     (session, num)).fetchone()
+    if not row:
+        return None
+    out = dict(row)
+    for key in ("who_is_affected", "provisions", "implications", "unclear",
+                "dropped", "flagged", "failures", "stats"):
+        try:
+            out[key] = json.loads(out[key] or "[]")
+        except Exception:
+            out[key] = []
+    if not isinstance(out.get("stats"), dict):
+        out["stats"] = {}
+    return out
+
+
 def _load_render(db, session, num):
     row = db.execute("SELECT version,fmt,segments FROM bill_render"
                      " WHERE session=? AND num=?", (session, num)).fetchone()
@@ -88,6 +105,7 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         refs = _rows(db, "SELECT * FROM statute_ref WHERE session=? AND num=?"
                          " ORDER BY bill_section IS NULL, bill_section, statute",
                      session, b["num"])
+        ai = _load_ai(db, session, b["num"])
         analyses = _rows(db, "SELECT kind,author,posted,url FROM analysis"
                              " WHERE session=? AND num=? ORDER BY posted",
                          session, b["num"])
@@ -117,7 +135,8 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
             has_text=loaded is not None,
             total_changes=sum(bk.changed for bk in all_blocks),
             truncated=len(all_blocks) > MAX_BLOCKS, stats=stats,
-            analyses=analyses, history=history.get(b["num"], []), **common)
+            analyses=analyses, ai=ai,
+            history=history.get(b["num"], []), **common)
         (out / "bills" / f"{b['num']}.html").write_text(html, encoding="utf-8")
 
         row = {

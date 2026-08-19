@@ -188,3 +188,27 @@ button.stat.on { border-color: var(--accent); border-width: 2px;
   padding: calc(.7rem - 1px) calc(.85rem - 1px); }
 button.stat.on b { color: var(--accent); }
 @media print { button.stat { cursor: auto; } }
+
+
+/* AI-written analysis. Visually fenced on purpose: a reader must never be
+   unsure which parts of this page were read from the record and which were
+   written by a model. */
+section.ai { border: 2px solid var(--accent); border-radius: var(--radius);
+  padding: .3rem 1.1rem 1.1rem; margin: 1.6rem 0; background: var(--panel); }
+section.ai h2 { border-bottom: none; margin-bottom: .2rem; }
+section.ai h3 { margin-top: 1.4rem; }
+section.ai .tag { font-size: .68rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; vertical-align: middle; padding: .16rem .5rem;
+  border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
+.ai-note { font-size: .85rem; color: var(--muted); margin: .3rem 0 1rem; }
+.lede { font-size: 1.06rem; font-weight: 600; margin: .6rem 0; }
+.claim { border-left: 3px solid var(--line); padding-left: .8rem; margin: .9rem 0; }
+.claim.major { border-left-color: var(--accent); }
+.claim-head { margin: 0 0 .25rem; font-weight: 600; }
+.claim p { margin: .25rem 0; }
+.claim blockquote { margin: .4rem 0 0; padding: .35rem .6rem; font-size: .87rem;
+  border-left: 2px solid var(--add-line); background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.claim blockquote::before { content: "\201C"; }
+.claim blockquote::after { content: "\201D"; }
+@media print { section.ai { border: 1px solid #666; } }

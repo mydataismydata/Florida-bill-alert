@@ -80,12 +80,25 @@ BUDGET = {"summary": 900, "provisions": 2000, "implications": 2000}
 # A deterministic backstop under the prompt. Speculation about motive is the
 # one failure this project cannot afford, so it is checked for rather than
 # merely discouraged.
-INTENT_LANGUAGE = re.compile(
-    r"\b(?:the )?(?:sponsor|author|legislator|senator|representative|"
-    r"republican|democrat|gop|lawmaker)s?\b|"
-    r"\b(?:intend|intends|intended|intention|motive|agenda|really wants?|"
-    r"aims? to|designed to allow|in order to let)\b", re.I)
+#
+# Precision matters as much as recall here. Legal drafting is full of innocent
+# intent words -- "a rural study area intended for residential development"
+# describes a land use designation, not a motive -- and an over-eager guard
+# discards verified claims. So bare intent verbs are not enough: the sentence
+# has to point at a person or party.
+ACTORS = (r"sponsor|author|lawmaker|legislator|senator|representative|"
+          r"republican|democrat|gop|the bill'?s backers?|proponents?|"
+          r"opponents?")
 
+INTENT_LANGUAGE = re.compile(
+    # naming a political actor at all, in what should be textual analysis
+    rf"\b(?:{ACTORS})s?\b"
+    # or attributing a want to someone
+    r"|\b(?:who|they|he|she|which)\s+(?:really\s+)?"
+    r"(?:want|wants|wanted|intend|intends|intended|hope|hopes)\b"
+    r"|\b(?:real|true|hidden|underlying)\s+(?:motive|intent|intention|purpose|agenda)\b"
+    r"|\b(?:motivated by|agenda|pretext|smokescreen)\b",
+    re.I)
 
 def messages(brief_text: str, pass_name: str) -> list[dict]:
     return [

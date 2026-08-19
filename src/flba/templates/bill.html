@@ -26,6 +26,63 @@
   </table>
 </div>
 
+{% if ai %}
+<section class="ai">
+  <h2>Plain-English analysis <span class="tag">AI-generated</span></h2>
+  <p class="ai-note">Written by a language model reading the bill text — not by
+     a person, and not reviewed by one. Every quotation below was checked
+     against the bill automatically; anything the model asserted that could not
+     be traced to the text was discarded before publication. It can still be
+     wrong about what the text <em>means</em>. Everything outside this box is
+     read mechanically from the official record.</p>
+
+  <p class="lede">{{ ai.one_line }}</p>
+  <p>{{ ai.summary }}</p>
+
+  {% if ai.who_is_affected %}
+  <h3>Who this affects</h3>
+  <ul>{% for w in ai.who_is_affected %}<li>{{ w }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  {% if ai.provisions %}
+  <h3>Provisions that matter</h3>
+  {% for p in ai.provisions %}
+  <div class="claim {{ p.significance }}">
+    <p class="claim-head">{{ p.heading }}
+      <span class="pill">{{ p.significance }}</span>
+      {% if p.statute %}<a class="pill" href="{{ root }}statutes/{{ p.statute }}.html">s. {{ p.statute }}</a>{% endif %}
+    </p>
+    <p>{{ p.effect }}</p>
+    <blockquote>{{ p.quote }}</blockquote>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if ai.implications %}
+  <h3>What this language would permit</h3>
+  <p class="ai-note">These describe what the wording allows, not what anyone
+     intends. Each is tied to the exact words that produce it.</p>
+  {% for i in ai.implications %}
+  <div class="claim">
+    <p class="claim-head">{{ i.consequence }}
+      <span class="pill">{{ i.certainty|replace('_',' ') }}</span></p>
+    <blockquote>{{ i.quote }}</blockquote>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if ai.unclear %}
+  <h3>Left unclear by the text</h3>
+  <ul>{% for u in ai.unclear %}<li>{{ u }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  <p class="meta">Model {{ ai.model }} · generated {{ ai.generated_at }}
+    {%- if ai.stats.claims_dropped %} · {{ ai.stats.claims_dropped }} unverifiable
+    claim(s) discarded{% endif %}.
+    <a href="{{ b.url }}">Check any of this against the bill itself →</a></p>
+</section>
+{% endif %}
+
 {% if b.long_title %}<h2>Provided summary</h2>
 <p>{{ b.long_title }}</p>{% endif %}
 

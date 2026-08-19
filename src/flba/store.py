@@ -109,6 +109,15 @@ CREATE TABLE IF NOT EXISTS bill_render (
     PRIMARY KEY (session, num, version)
 );
 
+CREATE TABLE IF NOT EXISTS analysis_ai (
+    session TEXT, num INTEGER, version TEXT,
+    model TEXT, generated_at TEXT DEFAULT (datetime('now')),
+    one_line TEXT, summary TEXT, who_is_affected TEXT,
+    reading TEXT, provisions TEXT, implications TEXT, unclear TEXT,
+    dropped TEXT, flagged TEXT, failures TEXT, stats TEXT,
+    PRIMARY KEY (session, num)
+);
+
 CREATE INDEX IF NOT EXISTS idx_change_bill ON change(session, num);
 CREATE INDEX IF NOT EXISTS idx_statute ON statute_ref(session, statute);
 CREATE INDEX IF NOT EXISTS idx_bill_session ON bill(session);
@@ -254,6 +263,43 @@ class Store:
                 (session, num, version, i, seg.kind, seg.line, seg.page,
                  seg.text[:600]))
         self.db.execute("COMMIT")
+
+    def save_analysis(self, a) -> None:
+        import json as _json
+        j = lambda v: _json.dumps(v, ensure_ascii=False)
+        self.db.execute("BEGIN IMMEDIATE")
+        self.db.execute(
+            "INSERT OR REPLACE INTO analysis_ai"
+            " (session,num,version,model,one_line,summary,who_is_affected,"
+            "  reading,provisions,implications,unclear,dropped,flagged,"
+            "  failures,stats)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (a.session, a.num, a.version, a.model,
+             a.summary.get("one_line", ""), a.summary.get("summary", ""),
+             j(a.summary.get("who_is_affected", [])), a.reading,
+             j(a.provisions), j(a.implications), j(a.unclear),
+             j(a.dropped), j(a.flagged), j(a.failures), j(a.stats)))
+        self.db.execute("COMMIT")
+
+    def load_analysis(self, session: str, num: int):
+        import json as _json
+        row = self.db.execute(
+            "SELECT * FROM analysis_ai WHERE session=? AND num=?",
+            (session, num)).fetchone()
+        if not row:
+            return None
+        out = dict(row)
+        for k in ("who_is_affected", "provisions", "implications", "unclear",
+                  "dropped", "flagged", "failures", "stats"):
+            try:
+                out[k] = _json.loads(out[k] or "[]")
+            except Exception:
+                out[k] = []
+        return out
+
+    def analysed_nums(self, session: str) -> set:
+        return {r["num"] for r in self.db.execute(
+            "SELECT num FROM analysis_ai WHERE session=?", (session,))}
 
     def known_bill_nums(self, session: str) -> set:
         rows = self.db.execute(
