@@ -114,13 +114,18 @@ BUDGET = {"summary": 900, "provisions": 2000, "implications": 2000}
 # describes a land use designation, not a motive -- and an over-eager guard
 # discards verified claims. So bare intent verbs are not enough: the sentence
 # has to point at a person or party.
-ACTORS = (r"sponsor|author|lawmaker|legislator|senator|representative|"
+# "Senator" and "Representative" are titles in legislative usage and ordinary
+# nouns everywhere else -- a bill about unclaimed property speaks of
+# "claimants' representatives", meaning agents, not members of the House. So
+# those two only count as a title immediately before a name.
+ACTORS = (r"sponsor|author|lawmaker|legislator|"
           r"republican|democrat|gop|the bill'?s backers?|proponents?|"
           r"opponents?")
+TITLED = r"\b(?:Senator|Representative|Rep\.|Sen\.)\s+[A-Z]"
 
 INTENT_LANGUAGE = re.compile(
     # naming a political actor at all, in what should be textual analysis
-    rf"\b(?:{ACTORS})s?\b"
+    rf"\b(?:{ACTORS})s?\b|{TITLED}"
     # or attributing a want to someone
     r"|\b(?:who|they|he|she|which)\s+(?:really\s+)?"
     r"(?:want|wants|wanted|intend|intends|intended|hope|hopes)\b"
