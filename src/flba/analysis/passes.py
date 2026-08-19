@@ -121,7 +121,10 @@ BUDGET = {"summary": 900, "provisions": 2000, "implications": 2000}
 ACTORS = (r"sponsor|author|lawmaker|legislator|"
           r"republican|democrat|gop|the bill'?s backers?|proponents?|"
           r"opponents?")
-TITLED = r"\b(?:Senator|Representative|Rep\.|Sen\.)\s+[A-Z]"
+# Case-sensitive on purpose: the surrounding pattern is case-insensitive, so
+# without the scoped flag this matches "representative may" as readily as
+# "Representative Smith".
+TITLED = r"(?-i:\b(?:Senator|Representative|Rep\.|Sen\.)\s+[A-Z])"
 
 INTENT_LANGUAGE = re.compile(
     # naming a political actor at all, in what should be textual analysis

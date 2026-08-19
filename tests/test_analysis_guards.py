@@ -49,6 +49,15 @@ def test_motive_claims_are_flagged():
     assert flags_intent("Republicans who want to limit local control.")
 
 
+def test_representative_is_a_title_only_before_a_name():
+    """A bill on unclaimed property speaks of claimants' representatives --
+    agents, not members of the House."""
+    assert not flags_intent("Claimants' representatives must be registered.")
+    assert not flags_intent("An authorized representative may sign for the owner.")
+    assert flags_intent("Senator Gaetz wants to expand the exemption.")
+    assert flags_intent("Rep. Smith pushed for this change.")
+
+
 def test_innocent_intent_words_are_not_flagged():
     """Legal drafting is full of them: "a rural study area intended for
     residential development" is a designation, not a motive."""
