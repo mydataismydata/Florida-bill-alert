@@ -28,13 +28,17 @@ def _paths(session: str):
             DATA / "index" / f"{session}.json")
 
 
-DEAD_MARKERS = ("died", "withdrawn", "indefinitely postponed",
-                "laid on table", "failed to pass", "vetoed")
-
-
 def is_dead(last_action: str) -> bool:
-    la = (last_action or "").lower()
-    return any(m in la for m in DEAD_MARKERS)
+    """Whether a bill's last recorded action ends it.
+
+    Delegates to the validated rules in `stages`. A substring match on
+    "withdrawn" or "laid on table" looks equivalent and is badly wrong: both
+    are usually procedural, and treating them as terminal marks bills that
+    became law as dead. See stages.py for the evidence.
+    """
+    from .stages import is_terminal
+    action = re.sub(r"^\d[\d/]*\s+\w*\s*-\s*", "", (last_action or "").strip())
+    return is_terminal(action)
 
 
 ORDER_SQL = {
@@ -337,6 +341,73 @@ def cmd_diff(args) -> int:
     return 0
 
 
+def cmd_track(args) -> int:
+    """Show where a bill sits in the process -- deterministic, no model."""
+    from .stages import kind_of, pathway, track
+
+    _, store, _ = _paths(args.session)
+    db = store.db
+
+    if args.summary:
+        from collections import Counter
+        rows = db.execute("SELECT num,label,chapter_law FROM bill WHERE session=?",
+                          (args.session,)).fetchall()
+        hist: dict[int, list] = {}
+        for r in db.execute("SELECT num,date,chamber,action FROM history"
+                            " WHERE session=? ORDER BY num,seq", (args.session,)):
+            hist.setdefault(r["num"], []).append(dict(r))
+        outcomes, stages = Counter(), Counter()
+        for b in rows:
+            p = track(hist.get(b["num"], []), b["chapter_law"], kind_of(b["label"]))
+            outcomes[p.outcome_label] += 1
+            stages[p.stage_label] += 1
+        print(f"session {args.session} — {len(rows)} bills\n")
+        print("  outcome")
+        for k, v in outcomes.most_common():
+            print(f"    {v:5}  {100*v/len(rows):4.1f}%  {k}")
+        print("\n  furthest stage reached")
+        for k, v in stages.most_common():
+            print(f"    {v:5}  {100*v/len(rows):4.1f}%  {k}")
+        return 0
+
+    if not args.number:
+        print("give a bill number, or --summary", file=sys.stderr)
+        return 2
+
+    num = int(re.search(r"(\d+)", args.number).group(1))
+    bill = db.execute("SELECT * FROM bill WHERE session=? AND num=?",
+                      (args.session, num)).fetchone()
+    if not bill:
+        print(f"bill {num} not ingested; run: flba --session {args.session} "
+              f"bill {num}", file=sys.stderr)
+        return 2
+
+    events = [dict(r) for r in db.execute(
+        "SELECT date,chamber,action FROM history WHERE session=? AND num=?"
+        " ORDER BY seq", (args.session, num))]
+    prog = track(events, bill["chapter_law"], kind_of(bill["label"]))
+
+    if args.json:
+        print(json.dumps({"bill": bill["label"], "title": bill["title"],
+                          **prog.as_dict(), "pathway": pathway(prog)}, indent=1))
+        return 0
+
+    print(f"{bill['label']} — {bill['title']}")
+    print(f"  {prog.kind_label()} · {prog.outcome_label} · {prog.percent}% of the way")
+    if prog.chapter_law:
+        print(f"  chapter law {prog.chapter_law}")
+    if prog.companion:
+        print(f"  companion that carried it: {prog.companion}")
+    if prog.died_in:
+        print(f"  died in: {prog.died_in}")
+    print()
+    for step in pathway(prog):
+        mark = "*" if step["current"] else ("x" if step["reached"] else " ")
+        date = step["date"] or ""
+        print(f"  [{mark}] {step['label']:<36} {date}")
+    return 0
+
+
 def cmd_status(args) -> int:
     _, store, index_path = _paths(args.session)
     db, s = store.db, args.session
@@ -372,7 +443,8 @@ def main(argv=None) -> int:
 
     for name, fn in (("enumerate", cmd_enumerate), ("bills", cmd_bills),
                      ("bill", cmd_bill), ("docs", cmd_docs),
-                     ("diff", cmd_diff), ("status", cmd_status)):
+                     ("diff", cmd_diff), ("track", cmd_track),
+                     ("status", cmd_status)):
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
         sp.add_argument("--refresh", action="store_true",
@@ -391,6 +463,11 @@ def main(argv=None) -> int:
                             help="use the last version rather than the first")
             sp.add_argument("--show", type=int, default=12,
                             help="how many runs to print per side")
+            sp.add_argument("--json", action="store_true")
+        if name == "track":
+            sp.add_argument("number", nargs="?", help="bill number, e.g. 1452")
+            sp.add_argument("--summary", action="store_true",
+                            help="outcome and stage distribution for the session")
             sp.add_argument("--json", action="store_true")
         if name in ("bills", "docs"):
             sp.add_argument("--limit", type=int, default=0,

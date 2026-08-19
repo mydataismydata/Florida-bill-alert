@@ -118,7 +118,7 @@ product's value is fully deterministic and carries zero hallucination risk:
 
 | Feature | Method | Hallucination risk |
 |---|---|---|
-| Stage / pathway tracking | State machine over the bill history log | **None** |
+| Stage / pathway tracking | State machine over the bill history log — **built, 100% agreement with the chapter-law record** | **None** |
 | What text is added vs. deleted | Florida bill HTML marks additions (underline) and deletions (strikethrough) — parse it | **None** |
 | Which statutes are amended | Citations section + text parsing | **None** |
 | Committee referrals, votes, sponsors | Structured scrape | **None** |
@@ -374,12 +374,13 @@ companions, zero fetch failures, all cached permanently on disk. *Exit criterion
 met: the corpus rebuilds from cache, offline.* Remaining: contribution docs and
 decision records.
 
-**Phase 1 — The deterministic product (Oct 2026, ~4 weeks)**
-Stage/pathway state machine. Strikethrough/underline diff parser. Statute
-cross-references. Sponsor fiscal-claim extraction. Static site generator.
-*Exit: a genuinely useful bill tracker with zero AI in it.* This is the checkpoint
-that de-risks everything — if the project stopped here it would still be worth
-publishing.
+**Phase 1 — The deterministic product — *mostly done, Aug 2026***
+Stage/pathway state machine and the additions/deletions diff parser for both
+chambers are built, tested, and validated against the full 2026 session.
+Remaining: statute cross-references, sponsor fiscal-claim extraction, and the
+static site generator. *Exit: a genuinely useful bill tracker with zero AI in
+it.* This is the checkpoint that de-risks everything — if the project stopped
+here it would still be worth publishing.
 
 **Phase 2 — AI analysis (Oct–Nov 2026, ~5 weeks, overlaps fall committee weeks)**
 Backend abstraction, chunking, constrained decoding, the four analysis passes, the
@@ -418,9 +419,13 @@ separate from the analysis layer, which costs nothing to do from the start.
    ingested with zero fetch failures; findings in [INGEST-NOTES.md](INGEST-NOTES.md).
 5. ~~Build the House PDF diff parser.~~ **Done**, validated at 99.0% against
    identical Senate companions.
-6. **Build the stage/pathway tracker** — a state machine over the history log.
-   With the diff layer done, that completes the deterministic product (Phase 1):
-   a genuinely useful bill tracker with no AI in it at all.
+6. ~~Build the stage/pathway tracker.~~ **Done**, and it classifies all 1,897
+   bills from history alone with zero misclassifications against the
+   chapter-law record.
+7. **Render the static site.** The deterministic product is now complete:
+   stage, pathway, additions/deletions, statute cross-references, sponsor
+   fiscal claims. That is a genuinely useful bill tracker with no AI in it,
+   and publishing it is the checkpoint that de-risks everything after.
 5. **Pick a license.** AGPL-3.0 if you want derivative *hosted* versions to stay
    open (relevant — someone will fork this for another state); MIT/Apache-2.0 for
    maximum adoption. This is a values call, not a technical one.

@@ -155,3 +155,82 @@ Two fixes found by that comparison, both of which had been silently wrong:
 
 `tests/test_diff.py` covers the geometry with synthetic pages (runs anywhere)
 and the corpus comparison as a regression guard (skips without a raw cache).
+
+## Stage tracking — the pathway layer
+
+`flba.stages` folds a bill's history into **two** values, because one is not
+enough: **stage** is how far it travelled, **outcome** is what became of it. A
+bill can reach the Governor and be vetoed, or die in its first committee while
+its identical companion becomes law. No single progress number says that.
+
+```bash
+flba --session 2026 track 1452            # the pathway for one bill
+flba --session 2026 track --summary       # distribution across the session
+```
+
+### History cells hold several actions
+
+Each action is rendered `&bull; <action><br>`, and one dated cell often holds a
+whole floor sequence (`Read 2nd time • Added to Third Reading Calendar • Read
+3rd time • Passed`). Storing the cell as one string loses the sequence: doing so
+undercounted the 2026 session by **10,953 events — 15,480 instead of 26,433**.
+
+### Three ways the vocabulary misleads
+
+Every one of these was a bug before it was a test.
+
+**"Laid on Table under Rule 7.18(a)" is not a death — it is a substitution.**
+When a committee adopts a substitute, the version it replaces is tabled and the
+CS is filed in its place:
+
+```
+Favorable with CS by Criminal Justice Subcommittee
+Reported out of Criminal Justice Subcommittee
+Laid on Table under Rule 7.18(a)      <- the superseded version
+CS Filed                               <- its replacement
+Referred to Judiciary Committee        <- and onward
+```
+
+313 bills have this in their history and **107 of them became law**. Reading it
+as death is the most damaging error this layer could make.
+
+**"Withdrawn from <committee>" is not a death — it is acceleration.** It pulls
+a bill out of committee straight onto the calendar; in 2026 it was followed by
+"Placed on Calendar" 157 times out of 164. Only *"Withdrawn prior to
+introduction"* and *"Withdrawn from further consideration"* end a bill.
+
+**"Died ... companion bill(s) passed, see X" means the policy was enacted.**
+The twin bill carried it. 294 bills — **15.5% of the session** — land here.
+Reporting them as plain failures would misinform exactly the reader this
+project exists to serve.
+
+### Not everything is a bill
+
+Joint resolutions (HJR/SJR) propose constitutional amendments and go to the
+**voters**, never to the Governor. Concurrent resolutions and memorials are
+filed with the Secretary of State. Simple resolutions bind only the chamber
+that adopts them. Scoring these against "did it become law?" misreports every
+one, so they get their own ladder ending in adoption, and `kind_of()` reads the
+type through any `CS/` prefixes.
+
+### Validation
+
+Classifying all 1,897 bills **from history alone**, with the chapter-law column
+withheld so the state machine cannot cheat:
+
+| outcome | count | share |
+|---|---|---|
+| Died | 1,274 | 67.2% |
+| Superseded — companion passed | 294 | 15.5% |
+| Became law | 228 | 12.0% |
+| Adopted (resolutions) | 92 | 4.8% |
+| Vetoed | 8 | 0.4% |
+| Still moving | 1 | 0.1% |
+
+**228 classified as enacted — exactly the 228 bills holding a chapter law, with
+zero misclassifications in either direction.**
+
+The single "still moving" bill is SPB 7042, which was temporarily postponed in
+committee and has no terminal action on the record at all. Reporting it as
+pending is correct: the tracker states what the record says rather than
+inferring a death the Legislature never wrote down.

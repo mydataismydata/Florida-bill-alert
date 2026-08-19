@@ -174,12 +174,18 @@ def parse_bill_page(html: str, session: str, num: int) -> dict:
     history = []
     for _, table in _tables_with_headings(soup.select_one("#tabBodyBillHistory")):
         for cells in _rows(table):
-            if len(cells) >= 3:
-                history.append({
-                    "date": _txt(cells[0]),
-                    "chamber": _txt(cells[1]),
-                    "action": re.sub(r"^[••]\s*", "", _txt(cells[2])),
-                })
+            if len(cells) < 3:
+                continue
+            date, chamber = _txt(cells[0]), _txt(cells[1])
+            # One cell often holds several actions, each rendered as
+            # "&bull; <action><br>" -- e.g. "Filed" and "1st Reading", or a
+            # whole floor sequence. They are separate events and the stage
+            # machine needs them separately.
+            for part in _txt(cells[2]).split("\u2022"):
+                part = part.strip(" \u2022")
+                if part:
+                    history.append({"date": date, "chamber": chamber,
+                                    "action": part})
     rec["history"] = history
 
     # --- bill text versions ---
