@@ -45,7 +45,7 @@
   {% endif %}
 
   {% if ai.provisions %}
-  <h3>Provisions that matter</h3>
+  <h3>Key provisions</h3>
   {% for p in ai.provisions %}
   <div class="claim {{ p.significance }}">
     <p class="claim-head">{{ p.heading }}
@@ -81,6 +81,32 @@
     claim(s) discarded{% endif %}.
     <a href="{{ b.url }}">Check any of this against the bill itself →</a></p>
 </section>
+{% endif %}
+
+{% if scope %}
+<h2>Applies to</h2>
+<div class="panel scope">
+  <p class="scope-line">{{ scope.describe }}</p>
+  {% if scope.thresholds %}
+  <p class="meta">The bill states this as
+    {% for t in scope.thresholds %}“{{ t }}”{% if not loop.last %}, {% endif %}{% endfor %}.
+    Resolved against the {{ pop_as_of }} state population estimates.</p>
+  {% endif %}
+  {% if scope.categories %}
+  <p class="meta">Also limited by statutory category: {{ scope.categories|join(', ') }}.</p>
+  {% endif %}
+  {% if scope.counties and not scope.statewide and scope.counties|length <= 30 %}
+  <p class="counties">{% for c in scope.counties %}<span class="county">{{ c }}</span>{% endfor %}</p>
+  {% elif scope.excluded %}
+  <p class="counties"><span class="meta">Excluded:</span>
+    {% for c in scope.excluded %}<span class="county out">{{ c }}</span>{% endfor %}</p>
+  {% endif %}
+  {% if districts %}
+  <p class="meta">Filed by
+    {% for d in districts %}<strong>{{ d.name }}</strong> (Senate District {{ d.district }}{% if d.party %}, {{ d.party }}{% endif %}) — {{ d.counties }}{% if not loop.last %}; {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+</div>
 {% endif %}
 
 {% if b.long_title %}<h2>Provided summary</h2>

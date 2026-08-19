@@ -49,7 +49,12 @@ Say what actually changes for people in practice, not what the bill is \
 "about". If it deletes an existing requirement, protection, or limit, say so \
 plainly -- that is usually the most important thing about a bill.
 
-Give two to four SHORT paragraphs of 25-45 words, one point each. Do not \
+The one-line field must be a SHORT verb phrase naming the single most \
+important effect -- 6 to 12 words, starting with a verb. The reader already \
+knows it is a bill, so never write "This bill ...", and never preview what the \
+paragraphs below will say. Cut every qualifier that is not load-bearing.
+
+Then give two to four SHORT paragraphs of 25-45 words, one point each. Do not \
 write a single long block.
 
 TASK provisions

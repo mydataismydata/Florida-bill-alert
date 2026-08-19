@@ -27,8 +27,22 @@ SUMMARY = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "one_line": {"type": "string", "minLength": 40,
-                     "description": "One sentence, under 25 words, plain English."},
+        # The reader already knows it is a bill. Anything restating that, or
+        # previewing what the paragraphs below say, is wasted words at the one
+        # place where brevity matters most.
+        "one_line": {
+            "type": "string", "minLength": 20, "maxLength": 95,
+            "description": ("The single most important effect, as a short verb "
+                            "phrase. START WITH A VERB. Never begin with "
+                            "'This bill', 'The bill' or 'Provides for'. No "
+                            "preamble, no qualifiers, no detail the summary "
+                            "repeats below. 6-12 words. Good: 'Allows "
+                            "development without amending the local "
+                            "comprehensive plan.' Bad: 'Replaces the existing "
+                            "comprehensive plan amendment process for "
+                            "agricultural enclaves with a new certification "
+                            "process that allows development.'"),
+        },
         # An array, not a string. Asked for "two to four sentences" the model
         # returns one 200-word block, which is technically compliant and
         # unreadable. Separate items render as separate paragraphs and force
