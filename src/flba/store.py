@@ -96,6 +96,13 @@ CREATE TABLE IF NOT EXISTS statute_ref (
     PRIMARY KEY (session, num, version, statute, bill_section)
 );
 
+CREATE TABLE IF NOT EXISTS change (
+    session TEXT, num INTEGER, version TEXT, seq INTEGER,
+    kind TEXT, line INTEGER, page INTEGER, text TEXT,
+    PRIMARY KEY (session, num, version, seq)
+);
+
+CREATE INDEX IF NOT EXISTS idx_change_bill ON change(session, num);
 CREATE INDEX IF NOT EXISTS idx_statute ON statute_ref(session, statute);
 CREATE INDEX IF NOT EXISTS idx_bill_session ON bill(session);
 CREATE INDEX IF NOT EXISTS idx_hist_bill    ON history(session, num);
@@ -196,6 +203,20 @@ class Store:
                 (session, num, version, r.statute, r.action, r.bill_section,
                  r.scope, r.verb, r.line_start, r.line_end, r.words_added,
                  r.words_deleted, int(r.in_title), int(r.in_body)))
+        self.db.execute("COMMIT")
+
+    def save_changes(self, session, num, version, segments) -> None:
+        """Persist the additions and deletions so the site build need not
+        re-parse a 300-page PDF for every rebuild."""
+        self.db.execute("BEGIN IMMEDIATE")
+        self.db.execute(
+            "DELETE FROM change WHERE session=? AND num=? AND version=?",
+            (session, num, version))
+        for i, seg in enumerate(segments):
+            self.db.execute(
+                "INSERT OR REPLACE INTO change VALUES (?,?,?,?,?,?,?,?)",
+                (session, num, version, i, seg.kind, seg.line, seg.page,
+                 seg.text[:600]))
         self.db.execute("COMMIT")
 
     def known_bill_nums(self, session: str) -> set:

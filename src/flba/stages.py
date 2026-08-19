@@ -185,6 +185,7 @@ class BillProgress:
     chapter_law: str | None = None
     events: int = 0
 
+    @property
     def kind_label(self) -> str:
         return KIND_LABEL[self.kind]
 

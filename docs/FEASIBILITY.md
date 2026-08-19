@@ -374,11 +374,13 @@ companions, zero fetch failures, all cached permanently on disk. *Exit criterion
 met: the corpus rebuilds from cache, offline.* Remaining: contribution docs and
 decision records.
 
-**Phase 1 — The deterministic product — *mostly done, Aug 2026***
+**Phase 1 — The deterministic product — *done, Aug 2026***
 Stage/pathway state machine, the additions/deletions diff parser for both
-chambers, and statute cross-referencing (forward and reverse) are built,
-tested, and validated against the full 2026 session. Remaining: sponsor
-fiscal-claim extraction and the static site generator. *Exit: a genuinely useful bill tracker with zero AI in
+chambers, statute cross-referencing (forward and reverse), and the static site
+generator are built, tested, and validated against the full 2026 session.
+The site renders 1,897 bill pages and 4,011 statute pages, ~32 MB, with no
+external requests. Sponsor fiscal-claim extraction is deferred -- it needs PDF
+*table* parsing and is a materially harder job than the layers before it. *Exit: a genuinely useful bill tracker with zero AI in
 it.* This is the checkpoint that de-risks everything — if the project stopped
 here it would still be worth publishing.
 
@@ -424,10 +426,12 @@ separate from the analysis layer, which costs nothing to do from the start.
    chapter-law record.
 7. ~~Build statute cross-references.~~ **Done**, with a reverse index — "which
    bills touch s. 119.071 this session?" is one query.
-8. **Render the static site.** The deterministic product is now complete:
-   stage, pathway, additions/deletions, statute cross-references, sponsor
-   fiscal claims. That is a genuinely useful bill tracker with no AI in it,
-   and publishing it is the checkpoint that de-risks everything after.
+8. ~~Render the static site.~~ **Done.** 1,897 bill pages, 4,011 statute
+   pages, self-contained, ~32 MB.
+9. **Publish it.** Point `scripts/deploy.sh` at the IONOS host and put the
+   deterministic tracker in front of real readers. That closes Phase 1 and
+   proves the one-way push before any model is involved.
+10. **Then** the AI layer (Phase 2), and sponsor fiscal-claim extraction.
 5. **Pick a license.** AGPL-3.0 if you want derivative *hosted* versions to stay
    open (relevant — someone will fork this for another state); MIT/Apache-2.0 for
    maximum adoption. This is a values call, not a technical one.

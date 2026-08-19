@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ b.label }} — {{ b.title|truncate(70) }} · {{ site_name }}{% endblock %}
+{% block description %}{{ b.label }}: {{ b.title|truncate(150) }}{% endblock %}
+{% block body %}
+<h1>{{ b.label }}</h1>
+<p class="sub">{{ b.title }}</p>
+
+<p>
+  <span class="badge {{ p.outcome }}">{{ p.outcome_label }}</span>
+  <span class="pill">{{ p.kind_label }}</span>
+  {% if b.chamber %}<span class="pill">{{ b.chamber }}</span>{% endif %}
+  {% if b.chapter_law %}
+    <span class="pill"><a href="{{ b.chapter_law_url or '#' }}">Chapter {{ b.chapter_law }}</a></span>
+  {% endif %}
+</p>
+
+<div class="panel">
+  <table>
+    {% if b.sponsor %}<tr><th>Sponsor</th><td>{{ b.sponsor }}</td></tr>{% endif %}
+    {% if b.cosponsors %}<tr><th>Co-introducers</th><td>{{ b.cosponsors }}</td></tr>{% endif %}
+    {% if b.effective_date %}<tr><th>Effective</th><td>{{ b.effective_date }}</td></tr>{% endif %}
+    {% if p.companion %}<tr><th>Companion</th><td>{{ p.companion }} — this bill was set aside and its companion carried the policy</td></tr>{% endif %}
+    {% if p.died_in %}<tr><th>Died in</th><td>{{ p.died_in }}</td></tr>{% endif %}
+    <tr><th>Official record</th><td><a href="{{ b.url }}">flsenate.gov</a></td></tr>
+  </table>
+</div>
+
+{% if b.long_title %}<h2>What it says it does</h2>
+<p>{{ b.long_title }}</p>{% endif %}
+
+<h2>How far it got</h2>
+<ol class="path">
+{% for s in path %}
+  <li class="{% if s.current %}done now{% elif s.reached %}done{% else %}todo{% endif %}">
+    {{ s.label }}{% if s.date %}<span class="when">{{ s.date }}</span>{% endif %}
+  </li>
+{% endfor %}
+</ol>
+
+{% if refs %}
+<h2>Statutes it changes</h2>
+<div class="scroll"><table>
+<thead><tr><th>Statute</th><th>Action</th><th>Where</th><th>Words</th><th>Scope</th></tr></thead>
+<tbody>
+{% for r in refs %}
+<tr>
+  <td class="num"><a href="{{ root }}statutes/{{ r.statute }}.html">s. {{ r.statute }}</a></td>
+  <td>{{ r.action }}</td>
+  <td class="num">{% if r.line_start %}line {{ r.line_start }}{% else %}<span class="meta">title</span>{% endif %}</td>
+  <td class="num">{% if r.words_added or r.words_deleted %}+{{ r.words_added }} / −{{ r.words_deleted }}{% endif %}</td>
+  <td class="meta">{{ r.scope|truncate(70) }}</td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+{% endif %}
+
+{% if changes %}
+<h2>What the text changes</h2>
+<p class="legend">Read straight from the bill: <span class="k a">added</span>
+   and <span class="k d">deleted</span> language, with the line numbers the
+   Legislature itself uses. {{ stats.words_inserted }} words added,
+   {{ stats.words_deleted }} deleted.</p>
+{% for c in changes %}
+<div class="chg {{ 'add' if c.kind == 'insert' else 'del' }}">
+  {% if c.line %}<div class="line">line {{ c.line }}</div>{% endif %}
+  <span class="text">{{ c.text }}</span>
+</div>
+{% endfor %}
+{% if truncated %}<p class="more">Showing the first {{ changes|length }} of
+  {{ total_changes }} changes. The full text is on
+  <a href="{{ b.url }}">flsenate.gov</a>.</p>{% endif %}
+{% endif %}
+
+{% if analyses %}
+<h2>Committee staff analyses</h2>
+<ul>{% for a in analyses %}
+  <li><a href="{{ a.url }}">{{ a.author or a.kind }}</a> <span class="meta">{{ a.posted }}</span></li>
+{% endfor %}</ul>
+{% endif %}
+
+<h2>History</h2>
+<div class="scroll"><table>
+<thead><tr><th>Date</th><th>Chamber</th><th>Action</th></tr></thead>
+<tbody>{% for h in history %}
+<tr><td class="num">{{ h.date }}</td><td>{{ h.chamber }}</td><td>{{ h.action }}</td></tr>
+{% endfor %}</tbody></table></div>
+{% endblock %}

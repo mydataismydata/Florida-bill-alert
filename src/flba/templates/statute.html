@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}s. {{ cite }} — {{ rows|length }} bill(s) · {{ site_name }}{% endblock %}
+{% block description %}Bills in the {{ session }} Florida session that change section {{ cite }}.{% endblock %}
+{% block body %}
+<h1>Section {{ cite }}, Florida Statutes</h1>
+<p class="sub">{{ rows|length }} bill{{ '' if rows|length == 1 else 's' }} in the
+   {{ session }} session change{{ 's' if rows|length == 1 else '' }} this section.</p>
+<p><a href="https://www.flsenate.gov/laws/statutes/2025/{{ cite }}">Read the current statute →</a></p>
+
+<div class="scroll"><table>
+<thead><tr><th>Bill</th><th>Title</th><th>Action</th><th>Words</th><th>Outcome</th></tr></thead>
+<tbody>{% for r in rows %}
+<tr>
+  <td class="num"><a href="{{ root }}bills/{{ r.num }}.html">{{ r.label }}</a></td>
+  <td>{{ r.title|truncate(70) }}</td>
+  <td>{{ r.action }}</td>
+  <td class="num">{% if r.words_added or r.words_deleted %}+{{ r.words_added }} / −{{ r.words_deleted }}{% endif %}</td>
+  <td><span class="badge {{ r.outcome }}">{{ r.outcome_label }}</span></td>
+</tr>{% endfor %}</tbody></table></div>
+{% endblock %}

@@ -42,8 +42,19 @@ on small models so contributors aren't required to own a large machine.
 
 ## Status
 
-Early. The ingest layer works; see [docs/FEASIBILITY.md](docs/FEASIBILITY.md)
-for the full plan and phasing.
+The deterministic layer is complete and the site builds. For the 2026 session:
+1,897 bills ingested with zero fetch failures, and every bill rendered with its
+pathway, the exact language it adds and deletes, and the statutes it changes.
+
+| layer | validation |
+|---|---|
+| Additions and deletions | 99.0% agreement against identical Senate companions |
+| Stage and outcome | 228/228 enacted bills, no misclassifications |
+| Statute cross-references | 98.7% recall, no false positives |
+
+No language model is involved in any of it. See
+[docs/FEASIBILITY.md](docs/FEASIBILITY.md) for the plan and
+[docs/SETUP.md](docs/SETUP.md) to run it.
 
 ## Data source
 

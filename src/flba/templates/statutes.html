@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Statutes changed in {{ session }} · {{ site_name }}{% endblock %}
+{% block body %}
+<h1>Statutes changed in {{ session }}</h1>
+<p class="sub">{{ rows|length }} sections of Florida law were amended, created,
+   or repealed by bills filed this session.</p>
+<label for="q" class="meta">Filter by section number</label>
+<input type="search" id="q" placeholder="e.g. 119.071" autocomplete="off">
+<div class="scroll"><table id="tbl">
+<thead><tr><th>Statute</th><th>Bills</th><th>Words added</th><th>Words deleted</th></tr></thead>
+<tbody>{% for s in rows %}
+<tr><td class="num"><a href="{{ s.statute }}.html">s. {{ s.statute }}</a></td>
+    <td class="num">{{ s.bills }}</td><td class="num">+{{ s.added }}</td>
+    <td class="num">−{{ s.deleted }}</td></tr>
+{% endfor %}</tbody></table></div>
+<script>
+document.getElementById('q').addEventListener('input', function (e) {
+  var t = e.target.value.trim().toLowerCase();
+  var rows = document.querySelectorAll('#tbl tbody tr');
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].style.display = rows[i].textContent.toLowerCase().indexOf(t) === -1 ? 'none' : '';
+  }
+});
+</script>
+{% endblock %}

@@ -393,7 +393,7 @@ def cmd_track(args) -> int:
         return 0
 
     print(f"{bill['label']} — {bill['title']}")
-    print(f"  {prog.kind_label()} · {prog.outcome_label} · {prog.percent}% of the way")
+    print(f"  {prog.kind_label} · {prog.outcome_label} · {prog.percent}% of the way")
     if prog.chapter_law:
         print(f"  chapter law {prog.chapter_law}")
     if prog.companion:
@@ -446,6 +446,8 @@ def cmd_crossref(args) -> int:
                 d = parse_house_pdf(path)
             refs = cross_reference(d)
             store.save_statute_refs(args.session, num, version, refs)
+            store.save_changes(args.session, num, version,
+                               d.insertions + d.deletions)
             total += len(refs)
         except Exception as exc:
             failed += 1
@@ -529,6 +531,20 @@ def cmd_statutes(args) -> int:
     return 0
 
 
+def cmd_build(args) -> int:
+    """Render the static site the public server will serve."""
+    from .site import build
+
+    out = Path(args.out) if args.out else ROOT / "site"
+    print(f"building session {args.session} -> {out}")
+    stats = build(DATA / "index.sqlite", out, args.session, limit=args.limit)
+    print(f"\n  {stats['bills']} bill pages")
+    print(f"  {stats['statutes']} statute pages")
+    print(f"  {stats['files']} files, {stats['bytes']/1e6:.1f} MB total")
+    print(f"\n  open: {out / 'index.html'}")
+    return 0
+
+
 def cmd_status(args) -> int:
     _, store, index_path = _paths(args.session)
     db, s = store.db, args.session
@@ -566,7 +582,7 @@ def main(argv=None) -> int:
                      ("bill", cmd_bill), ("docs", cmd_docs),
                      ("diff", cmd_diff), ("track", cmd_track),
                      ("crossref", cmd_crossref), ("statutes", cmd_statutes),
-                     ("status", cmd_status)):
+                     ("build", cmd_build), ("status", cmd_status)):
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
         sp.add_argument("--refresh", action="store_true",
@@ -596,6 +612,9 @@ def main(argv=None) -> int:
             sp.add_argument("--statute", help="reverse lookup, e.g. 286.011")
             sp.add_argument("--json", action="store_true")
         if name == "crossref":
+            sp.add_argument("--limit", type=int, default=0)
+        if name == "build":
+            sp.add_argument("--out", help="output directory (default ./site)")
             sp.add_argument("--limit", type=int, default=0)
         if name in ("bills", "docs"):
             sp.add_argument("--limit", type=int, default=0,

@@ -131,3 +131,43 @@ touching the pipeline. Cloud API access is just another profile.
 Not built yet. The analysis box renders a static bundle and pushes it one-way
 to the public host over SSH; the public server runs no model and never
 initiates a connection inward. See [FEASIBILITY.md](FEASIBILITY.md) §3.
+
+## 4. Building and publishing the site
+
+```bash
+$P -m flba --session 2026 crossref     # index statutes + changes (offline)
+$P -m flba --session 2026 build        # render the static site
+```
+
+Output lands in `site/` — for the 2026 session that is **1,897 bill pages,
+4,011 statute pages, 5,913 files, about 32 MB**. Comfortable on shared hosting,
+and small enough that a rebuild takes under two minutes.
+
+Preview locally:
+
+```bash
+$P -m http.server 8791 --directory site
+```
+
+The site is deliberately plain: no JavaScript frameworks, no webfonts, no
+analytics, and **no external requests of any kind**. It works with JavaScript
+disabled apart from the search box, prints legibly (legislative offices print
+things), and follows the reader's light or dark preference.
+
+### Publishing
+
+```bash
+export FLBA_HOST=u12345@access.example.com
+export FLBA_PATH=/homepages/12/htdocs/billalert
+
+scripts/deploy.sh          # dry run — shows what would change
+scripts/deploy.sh --go     # push
+```
+
+The push is one-way. The public host never connects back to this machine and
+holds no model, no pipeline, and no database — only files. That is what makes
+the gap structural rather than merely configured.
+
+`--delete` keeps the public tree an exact mirror so withdrawn content does not
+linger, and `--checksum` is used because a rebuild rewrites every file's
+timestamp even when the bytes are unchanged.

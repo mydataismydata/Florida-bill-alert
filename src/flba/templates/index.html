@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ site_name }} — {{ session }} session{% endblock %}
+{% block body %}
+<h1>What the Florida Legislature did in {{ session }}</h1>
+<p class="sub">Every bill, how far it got, and exactly which words it changed —
+   read mechanically from the official record.</p>
+
+<div class="stats">
+  <div class="stat"><b>{{ bill_count }}</b><span>bills filed</span></div>
+  {% for o in outcomes %}
+  <div class="stat"><b>{{ o.n }}</b><span>{{ o.label|lower }}</span></div>
+  {% endfor %}
+</div>
+
+<h2>Find a bill</h2>
+<label for="q" class="meta">Search by number, title, or sponsor</label>
+<input type="search" id="q" placeholder="e.g. 1452, public records, Gaetz" autocomplete="off">
+<div id="results"></div>
+<p class="more" id="hint">Searching all {{ bill_count }} bills.</p>
+
+<h2>Bills that became law</h2>
+<div class="scroll"><table>
+<thead><tr><th>Bill</th><th>Title</th><th>Chapter</th></tr></thead>
+<tbody>{% for b in enacted %}
+<tr>
+  <td class="num"><a href="bills/{{ b.num }}.html">{{ b.label }}</a></td>
+  <td>{{ b.title|truncate(88) }}</td>
+  <td class="num">{{ b.chapter_law }}</td>
+</tr>{% endfor %}</tbody></table></div>
+
+<h2>Most-changed statutes</h2>
+<div class="scroll"><table>
+<thead><tr><th>Statute</th><th>Bills</th><th>Words added</th><th>Words deleted</th></tr></thead>
+<tbody>{% for s in top_statutes %}
+<tr>
+  <td class="num"><a href="statutes/{{ s.statute }}.html">s. {{ s.statute }}</a></td>
+  <td class="num">{{ s.bills }}</td>
+  <td class="num">+{{ s.added }}</td>
+  <td class="num">−{{ s.deleted }}</td>
+</tr>{% endfor %}</tbody></table></div>
+<p class="more"><a href="statutes/index.html">All statutes touched this session →</a></p>
+
+<script>
+(function () {
+  var q = document.getElementById('q'), out = document.getElementById('results'),
+      hint = document.getElementById('hint'), data = null, timer = null;
+  function load() {
+    if (data) return Promise.resolve(data);
+    return fetch('search-index.json').then(function (r) { return r.json(); })
+      .then(function (j) { data = j; return j; });
+  }
+  function render(rows, term) {
+    if (!term) { out.innerHTML = ''; hint.textContent = 'Searching all ' + data.length + ' bills.'; return; }
+    if (!rows.length) { out.innerHTML = ''; hint.textContent = 'No bill matches “' + term + '”.'; return; }
+    var shown = rows.slice(0, 60), h = '<div class="scroll"><table><thead><tr>' +
+      '<th>Bill</th><th>Title</th><th>Outcome</th></tr></thead><tbody>';
+    for (var i = 0; i < shown.length; i++) {
+      var b = shown[i];
+      h += '<tr><td class="num"><a href="bills/' + b.n + '.html">' + b.l +
+           '</a></td><td>' + b.t + '</td><td>' + b.o + '</td></tr>';
+    }
+    out.innerHTML = h + '</tbody></table></div>';
+    hint.textContent = rows.length > shown.length
+      ? 'Showing 60 of ' + rows.length + ' matches — narrow the search to see more.'
+      : rows.length + ' match' + (rows.length === 1 ? '' : 'es') + '.';
+  }
+  function run() {
+    var term = q.value.trim().toLowerCase();
+    load().then(function (rows) {
+      if (!term) return render([], '');
+      render(rows.filter(function (b) { return b.s.indexOf(term) !== -1; }), term);
+    });
+  }
+  q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(run, 120); });
+})();
+</script>
+{% endblock %}
