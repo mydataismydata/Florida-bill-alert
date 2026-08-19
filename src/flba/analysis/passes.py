@@ -46,6 +46,19 @@ what it adds.
 - Never speculate about anyone's motives, party, or intent. Describe what the \
 text does and what it permits.
 
+How Florida drafts. These words are terms of art and do not carry their \
+ordinary-English force:
+- "MAY NOT" and "SHALL NOT" are BOTH mandatory prohibitions, equal in effect. \
+"May not" is the form Florida prefers and is far more common in the statutes. \
+It NEVER means "is permitted not to", and a prohibition is not weaker for \
+using it. If the text says an assessment "may not be levied", then levying it \
+is forbidden.
+- "SHALL" and "MUST" both impose a mandatory duty.
+- "MAY" on its own is permissive and grants discretion.
+- "IS ENTITLED TO" confers a right.
+Never argue that a prohibition is weak, optional or merely advisory because of \
+which of these words it uses.
+
 The final line of the message names which task to perform.
 
 TASK summary
@@ -126,3 +139,35 @@ def messages(brief_text: str, pass_name: str) -> list[dict]:
 def flags_intent(text: str) -> str | None:
     m = INTENT_LANGUAGE.search(text or "")
     return m.group(0) if m else None
+
+
+# A prohibition read as a permission inverts the bill. Florida writes
+# prohibitions as "may not" far more often than "shall not" -- 866 occurrences
+# against 227 in a sample of the 2026 session -- and a model that treats "may
+# not" as the weaker form gets the meaning exactly backwards. The prompt says
+# so plainly; this catches it when the prompt does not hold.
+PROHIBITION = re.compile(
+    r"\b(?:may not|shall not|must not|is prohibited|are prohibited|"
+    r"no \w+ may|may no longer)\b", re.I)
+
+# Asserting a capability ...
+PERMISSION = re.compile(
+    r"\b(?:can|could|is able to|are able to|is allowed to|are allowed to|"
+    r"is permitted to|are permitted to|may)\s+\w+", re.I)
+
+# ... unless the sentence is itself negating that capability.
+NEGATED = re.compile(
+    r"\b(?:cannot|can no longer|can't|may not|is not|are not|no longer|"
+    r"not permitted|not allowed|prohibited|barred|prevented|unable)\b", re.I)
+
+
+def flags_inverted_prohibition(consequence: str, quote: str) -> str | None:
+    """Catch a claim that reads a prohibition as though it granted permission."""
+    if not PROHIBITION.search(quote or ""):
+        return None
+    if NEGATED.search(consequence or ""):
+        return None
+    m = PERMISSION.search(consequence or "")
+    if m:
+        return f"reads a prohibition as permission ({m.group(0)!r})"
+    return None

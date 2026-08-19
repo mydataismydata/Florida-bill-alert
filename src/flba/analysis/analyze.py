@@ -117,7 +117,9 @@ def analyze(db, session: str, num: int, backend: Backend,
             # a claim about motive is removed even when its quote is genuine
             clean = []
             for claim in kept:
-                hit = P.flags_intent(claim.get("consequence", ""))
+                hit = (P.flags_intent(claim.get("consequence", ""))
+                       or P.flags_inverted_prohibition(
+                           claim.get("consequence", ""), claim.get("quote", "")))
                 if hit:
                     out.flagged.append(dict(claim, flagged_for=hit))
                 else:
