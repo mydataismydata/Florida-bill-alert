@@ -270,3 +270,25 @@ section.ai li { margin: .3rem 0; }
   margin: 0 .3rem .3rem 0; border: 1px solid var(--line);
   border-radius: 999px; background: var(--bg); }
 .county.out { border-color: var(--vetoed); color: var(--vetoed); }
+
+
+/* a quote that takes you to the words */
+a.quote-link { text-decoration: none; display: block; }
+a.quote-link blockquote { transition: border-color .12s, background .12s; }
+a.quote-link:hover blockquote { border-left-color: var(--accent);
+  background: var(--panel); }
+.claim blockquote .at { display: block; margin-top: .3rem; font-size: .74rem;
+  font-family: inherit; letter-spacing: .03em; color: var(--accent); }
+.claim blockquote .at::before { content: ""; }
+
+a.button { display: inline-block; text-decoration: none; font-size: .9rem;
+  font-weight: 600; padding: .5rem .9rem; border-radius: var(--radius);
+  background: var(--accent); color: var(--accent-ink); }
+a.button:hover { filter: brightness(1.08); }
+
+tr.expander td { padding: .35rem .6rem; }
+tr.expander button { font: inherit; font-size: .84rem; cursor: pointer;
+  color: var(--accent); background: none; border: 1px dashed var(--line);
+  border-radius: var(--radius); padding: .3rem .7rem; width: 100%; }
+tr.expander button:hover { border-color: var(--accent); }
+@media print { tr.expander { display: none !important; } }

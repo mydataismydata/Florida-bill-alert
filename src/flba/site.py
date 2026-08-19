@@ -16,7 +16,8 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from .diff import PLAIN, BillDiff, Segment, context_blocks, lines as doc_lines
+from .diff import PLAIN, BillDiff, Segment, context_blocks, locate
+from .diff import lines as doc_lines
 from .scope import resolve as resolve_scope
 from .scope import sponsor_districts
 from .stages import kind_of, pathway, track
@@ -120,6 +121,11 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
             version, fmt, d = loaded
             scope = resolve_scope(" ".join(s.text for s in d.segments))
             nchars = sum(len(s.text) for s in d.segments)
+            # Anchor each claim to the line its quote sits on, so a reader can
+            # jump to the words themselves rather than to the statute at large.
+            if ai:
+                for claim in (ai.get("provisions") or []) + (ai.get("implications") or []):
+                    claim["line"] = locate(d, claim.get("quote", ""))
             all_blocks = context_blocks(d)
             blocks = all_blocks[:MAX_BLOCKS]
             stats = {

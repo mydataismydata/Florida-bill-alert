@@ -53,7 +53,10 @@
       {% if p.statute %}<a class="pill" href="{{ root }}statutes/{{ p.statute }}.html">s. {{ p.statute }}</a>{% endif %}
     </p>
     <p>{{ p.effect }}</p>
-    <blockquote>{{ p.quote }}</blockquote>
+    {% if p.line and has_text %}
+    <a class="quote-link" href="{{ root }}bills/{{ b.num }}-text.html#L{{ p.line }}">
+      <blockquote>{{ p.quote }}<span class="at">line {{ p.line }} →</span></blockquote></a>
+    {% else %}<blockquote>{{ p.quote }}</blockquote>{% endif %}
   </div>
   {% endfor %}
   {% endif %}
@@ -66,7 +69,10 @@
   <div class="claim">
     <p class="claim-head">{{ i.consequence }}
       <span class="pill">{{ i.certainty|replace('_',' ') }}</span></p>
-    <blockquote>{{ i.quote }}</blockquote>
+    {% if i.line and has_text %}
+    <a class="quote-link" href="{{ root }}bills/{{ b.num }}-text.html#L{{ i.line }}">
+      <blockquote>{{ i.quote }}<span class="at">line {{ i.line }} →</span></blockquote></a>
+    {% else %}<blockquote>{{ i.quote }}</blockquote>{% endif %}
   </div>
   {% endfor %}
   {% endif %}
@@ -138,24 +144,15 @@
 </tbody></table></div>
 {% endif %}
 
-{% if blocks %}
-<h2>Text revisions</h2>
-<p class="legend"><span class="k a">Underlined</span> language is being added;
-   <span class="k d">struck</span> language is being deleted. Each passage is
-   shown as it reads in the bill. {{ stats.words_inserted }} words added,
-   {{ stats.words_deleted }} deleted across {{ total_changes }} places.</p>
-{% for blk in blocks %}
-<div class="passage">
-  {% if blk.line %}{% if has_text %}<a class="line" href="{{ root }}bills/{{ b.num }}-text.html#L{{ blk.line }}">line {{ blk.line }}</a>{% else %}<span class="line">line {{ blk.line }}</span>{% endif %}{% endif %}
-  <p>{{ marked(blk.parts) }}</p>
-</div>
-{% endfor %}
-<p class="more">
-  {% if truncated %}Showing {{ blocks|length }} of {{ total_blocks }} changed
-  passages. {% endif %}
-  <a href="{{ root }}bills/{{ b.num }}-text.html">Read the full bill with every
-  change marked →</a>
-</p>
+{% if has_text %}
+<h2>Latest markup text</h2>
+<p>The full bill with every addition and deletion marked, carrying the
+   Legislature's own line numbers.
+   {% if stats.words_inserted or stats.words_deleted %}
+   This version adds {{ stats.words_inserted }} words and deletes
+   {{ stats.words_deleted }}{% if total_changes %} across {{ total_changes }}
+   places{% endif %}.{% endif %}</p>
+<p><a class="button" href="{{ root }}bills/{{ b.num }}-text.html">Read the marked-up bill →</a></p>
 {% endif %}
 
 {% if analyses %}
@@ -166,9 +163,33 @@
 {% endif %}
 
 <h2>History</h2>
-<div class="scroll"><table>
+<div class="scroll"><table id="history">
 <thead><tr><th>Date</th><th>Chamber</th><th>Action</th></tr></thead>
 <tbody>{% for h in history|reverse %}
 <tr><td class="num">{{ h.date }}</td><td>{{ h.chamber }}</td><td>{{ h.action }}</td></tr>
 {% endfor %}</tbody></table></div>
+<script>
+(function () {
+  // Every row is in the page; the middle is folded away afterwards so the
+  // history stays complete for printing, searching and readers without JS.
+  var KEEP_TOP = 2, KEEP_BOTTOM = 10;
+  var rows = document.querySelectorAll('#history tbody tr');
+  if (rows.length <= KEEP_TOP + KEEP_BOTTOM) return;
+  var hidden = [], i;
+  for (i = KEEP_TOP; i < rows.length - KEEP_BOTTOM; i++) { hidden.push(rows[i]); }
+  var tr = document.createElement('tr');
+  tr.className = 'expander';
+  tr.innerHTML = '<td colspan="3"><button type="button">Show ' + hidden.length +
+    ' earlier action' + (hidden.length === 1 ? '' : 's') + '</button></td>';
+  rows[KEEP_TOP].parentNode.insertBefore(tr, rows[KEEP_TOP]);
+  function fold(on) {
+    for (var j = 0; j < hidden.length; j++) {
+      hidden[j].style.display = on ? 'none' : '';
+    }
+    tr.style.display = on ? '' : 'none';
+  }
+  tr.querySelector('button').addEventListener('click', function () { fold(false); });
+  fold(true);
+})();
+</script>
 {% endblock %}

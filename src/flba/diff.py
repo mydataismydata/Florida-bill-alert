@@ -26,6 +26,8 @@ INSERT, DELETE, PLAIN = "insert", "delete", "plain"
 
 # The HTML uses typographic punctuation while the PDF yields ASCII, so
 # "applicant’s" and "applicant's" must not tokenise differently.
+_WS = re.compile(r"\s+")
+
 PUNCT = str.maketrans({
     "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'",
     "\u201c": '"', "\u201d": '"',
@@ -344,6 +346,34 @@ def lines(diff: BillDiff) -> list[dict]:
         if seg.kind != PLAIN:
             cur["changed"] = True
     return out
+
+
+def locate(diff: BillDiff, quote: str) -> int | None:
+    """Find the line a quoted span sits on.
+
+    Lets a claim link to the exact place in the bill it rests on, rather than
+    to the statute in general -- the reader lands on the words themselves.
+    """
+    target = _WS.sub(" ", normalize(quote or "")).strip().lower()
+    if len(target) < 12:
+        return None
+    head = target[:60]
+    running, spans = [], []
+    for seg in diff.segments:
+        text = _WS.sub(" ", normalize(seg.text)).strip().lower()
+        spans.append((sum(len(t) + 1 for t in running), seg))
+        running.append(text)
+    joined = " ".join(running)
+    at = joined.find(head)
+    if at < 0:
+        return None
+    best = None
+    for start, seg in spans:
+        if start <= at and seg.line:
+            best = seg.line
+        elif start > at:
+            break
+    return best
 
 
 def parse(path_or_html, chamber: str) -> BillDiff:

@@ -52,8 +52,17 @@ pathway, the exact language it adds and deletes, and the statutes it changes.
 | Stage and outcome | 228/228 enacted bills, no misclassifications |
 | Statute cross-references | 98.7% recall, no false positives |
 
-No language model is involved in any of it. See
-[docs/FEASIBILITY.md](docs/FEASIBILITY.md) for the plan and
+No language model is involved in any of that.
+
+On top of it sits an analysis layer that does use one — a plain-English
+summary, the key provisions, and what the language would permit — where every
+claim must quote the bill verbatim and each quote is checked against the source
+before publication. Claims that fail are discarded. It is fenced and labelled
+on the page so a reader never has to guess which parts were read from the
+record and which were written by a model. See
+[docs/ANALYSIS-NOTES.md](docs/ANALYSIS-NOTES.md).
+
+See [docs/FEASIBILITY.md](docs/FEASIBILITY.md) for the plan and
 [docs/SETUP.md](docs/SETUP.md) to run it.
 
 ## Data source
