@@ -18,6 +18,25 @@ from .brief import strip_markers
 
 EXACT, LOOSE, FAILED = "exact", "loose", "failed"
 
+# A grammar guarantees well-formed output, not useful output. Cornered by a
+# length floor it cannot satisfy, a model will pad -- emitting the same
+# character until the token budget runs out. That is well-formed, on-schema,
+# and worthless, so it has to be detected rather than trusted.
+_RUN = re.compile(r"(.)\1{24,}")
+
+
+def is_degenerate(text: str) -> str | None:
+    """Return why this output is unusable, or None if it looks real."""
+    if not text or not text.strip():
+        return "empty response"
+    run = _RUN.search(text)
+    if run:
+        return f"padded with repeated {run.group(1)!r}"
+    stripped = text.strip()
+    if stripped.startswith("{") and not stripped.endswith("}"):
+        return "truncated before the object closed"
+    return None
+
 _WS = re.compile(r"\s+")
 _NOT_ALNUM = re.compile(r"[^a-z0-9]+")
 

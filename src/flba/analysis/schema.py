@@ -10,19 +10,26 @@ of a legislator, and it works as well on a 3B model as on a large one.
 """
 from __future__ import annotations
 
+# Constrained decoding makes the SHORTEST valid completion the cheapest one,
+# so a schema that permits a trivial answer will get one. Empty arrays and
+# one-character strings are both legal JSON; length floors are what stop the
+# model taking that exit when it is unsure. Item-count floors are worse -- they
+# force invention on genuinely trivial bills, which is the failure that matters.
 QUOTE = {
     "type": "string",
-    "description": ("A short span copied EXACTLY from the bill text, without "
-                    "the [[+ +]] or [[- -]] markers. 4 to 40 words."),
+    "minLength": 25,
+    "description": ("A span of OPERATIVE language copied EXACTLY from the bill "
+                    "text, without the [[+ +]] or [[- -]] markers. Not the bill "
+                    "title. 4 to 40 words."),
 }
 
 SUMMARY = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "one_line": {"type": "string",
+        "one_line": {"type": "string", "minLength": 40,
                      "description": "One sentence, under 25 words, plain English."},
-        "summary": {"type": "string",
+        "summary": {"type": "string", "minLength": 150,
                     "description": "Two to four sentences in plain English. "
                                    "No legal jargon. Say what changes in practice."},
         "who_is_affected": {
@@ -39,13 +46,14 @@ PROVISIONS = {
     "properties": {
         "provisions": {
             "type": "array",
+            "maxItems": 8,
             "items": {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
-                    "heading": {"type": "string",
+                    "heading": {"type": "string", "minLength": 8,
                                 "description": "Under 10 words."},
-                    "effect": {"type": "string",
+                    "effect": {"type": "string", "minLength": 60,
                                "description": "What this provision does, in plain English."},
                     "quote": QUOTE,
                     "statute": {"type": "string",
@@ -70,14 +78,24 @@ IMPLICATIONS = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
+        # Written first, and required to be substantial: reasoning in prose
+        # before the list is what stops the model returning an empty one.
+        "reading": {
+            "type": "string", "minLength": 150,
+            "description": ("Before listing anything: in 2-3 sentences, what "
+                            "does this bill change about who may, must, or "
+                            "cannot do what? Say plainly what it removes from "
+                            "existing law."),
+        },
         "implications": {
             "type": "array",
+            "maxItems": 6,
             "items": {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
                     "consequence": {
-                        "type": "string",
+                        "type": "string", "minLength": 60,
                         "description": ("A concrete situation this language would "
                                         "permit or require. Describe the text's "
                                         "effect. Never state or imply what any "
@@ -97,11 +115,11 @@ IMPLICATIONS = {
             },
         },
         "unclear": {
-            "type": "array", "items": {"type": "string"},
+            "type": "array", "maxItems": 5, "items": {"type": "string"},
             "description": "Terms left undefined, or discretion left unbounded.",
         },
     },
-    "required": ["implications", "unclear"],
+    "required": ["reading", "implications", "unclear"],
 }
 
 PASSES = {"summary": SUMMARY, "provisions": PROVISIONS, "implications": IMPLICATIONS}

@@ -11,7 +11,7 @@ from . import passes as P
 from .backend import Backend
 from .brief import build as build_brief
 from .brief import source_text
-from .verify import Verifier, verify_claims
+from .verify import Verifier, is_degenerate, verify_claims
 
 # Models return the citation both ways -- "493.6102" and "s. 493.6102" -- and
 # a display layer that prepends "s. " turns the second into "s. s. 493.6102".
@@ -55,6 +55,8 @@ class Analysis:
     unclear: list = field(default_factory=list)
     dropped: list = field(default_factory=list)
     flagged: list = field(default_factory=list)
+    failures: list = field(default_factory=list)
+    reading: str = ""
     stats: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
@@ -75,13 +77,29 @@ def analyze(db, session: str, num: int, backend: Backend,
     t0 = time.time()
 
     for name in P.ORDER:
-        reply = backend.chat(P.messages(brief["text"], name),
-                             schema=P.SCHEMAS[name],
-                             max_tokens=P.BUDGET[name])
-        try:
-            data = reply.json()
-        except json.JSONDecodeError:
-            log(f"    {name}: unparseable output, skipped")
+        data, reply = None, None
+        # A shorter brief reliably recovers a pass that degenerates on the
+        # full one, so retry smaller rather than dropping the bill.
+        for attempt, shrink in enumerate((1.0, 0.4)):
+            text = (brief["text"] if shrink == 1.0 else
+                    build_brief(bill, diff, refs,
+                                budget=int(budget * shrink))["text"])
+            reply = backend.chat(P.messages(text, name),
+                                 schema=P.SCHEMAS[name],
+                                 max_tokens=P.BUDGET[name])
+            why = is_degenerate(reply.text)
+            if why is None:
+                try:
+                    data = reply.json()
+                    break
+                except json.JSONDecodeError:
+                    why = "unparseable JSON"
+            out.failures.append({"pass": name, "attempt": attempt + 1,
+                                 "reason": why, "brief_scale": shrink})
+            log(f"    {name}: attempt {attempt + 1} unusable ({why})")
+
+        if data is None:
+            log(f"    {name}: giving up after retry")
             continue
         log(f"    {name}: {reply.seconds:.1f}s "
             f"({'cached' if reply.cache_hit else 'full prefill'})")
@@ -105,6 +123,7 @@ def analyze(db, session: str, num: int, backend: Backend,
                 else:
                     clean.append(claim)
             out.implications = clean
+            out.reading = data.get("reading", "")
             out.unclear = data.get("unclear", [])
             out.dropped += [dict(d, pass_name=name) for d in dropped]
 
@@ -118,6 +137,7 @@ def analyze(db, session: str, num: int, backend: Backend,
         "claims_kept": len(out.provisions) + len(out.implications),
         "claims_dropped": len(out.dropped),
         "claims_flagged": len(out.flagged),
+        "pass_failures": len(out.failures),
         "verify_rate": round(1 - len(out.dropped) / total, 3) if total else None,
     }
     return out
