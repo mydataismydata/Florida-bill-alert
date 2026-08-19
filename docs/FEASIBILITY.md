@@ -35,7 +35,7 @@ known outcomes** — the ideal evaluation set. Build against 2026, ship for 2027
 | Is there an official bulk API? | **No.** Neither chamber publishes a bulk API or bulk export. |
 | Is scraping permitted? | **Yes.** `flsenate.gov/robots.txt` is `User-agent: *` / `crawl-delay: 1` — no `Disallow` rules. A polite 1 req/sec crawler is within stated policy. |
 | Single source or two? | **Effectively one.** flsenate.gov carries House bills, House bill text, *and* House committee staff analyses (e.g. `/Session/Bill/2025/579/Analyses/h0579z1.HAT.PDF` — the `h` prefix is a House document served from the Senate site). One scraper, not two. |
-| Corpus size | **1,897 bills** in the 2026 session (both chambers). |
+| Corpus size | **1,897 bills** in the 2026 session (both chambers) — now fully ingested, zero fetch failures. |
 | URL patterns | Bill page `/Session/Bill/{year}/{number}`; analyses under `.../Analyses/{doc}.PDF`; special sessions get their own session code (`2026E`). Stable and predictable. |
 | Per-bill content | Bill History (action log), Related Bills, **Bill Text in HTML *and* PDF**, Committee Amendments, Floor Amendments, **Bill Analyses (PDF)**, Vote History (committee + floor, PDF), Citations (statutes / constitution / chapter law). |
 | Fiscal estimates to cross-reference | Committee staff analyses carry fiscal impact sections; the House uses "Fiscal Analysis & Economic Impact Statement." Local bills require a separate Economic Impact Statement form. Office of Economic & Demographic Research (edr.state.fl.us) publishes the official Revenue Estimating Conference numbers. |
@@ -53,12 +53,23 @@ bulk as a nightly reconciliation check ("did we miss a bill?"). Never depend on 
 third party for the primary path — it's the one thing that can be quietly
 deprecated out from under an open-source project.
 
-**Two ingestion caveats:**
+**The one real ingestion asymmetry** (measured across all 1,897 bills):
 
-- Bill *text* is available as HTML → clean extraction, no OCR. Good.
-- Bill *analyses* and *vote records* are **PDF-only** → needs a text-extraction
-  layer. These are digitally generated PDFs (not scans), so extraction is
-  tractable, but layout parsing of the fiscal tables will need real work.
+| | HTML bill text | PDF only |
+|---|---|---|
+| **Senate** (942 bills) | **942 — 100%** | 0 |
+| **House** (955 bills) | **1 — 0.1%** | 954 |
+
+Senate text is Word-generated HTML with explicit `Insert`/`Remove` markup.
+House text is PDF. This matters because the additions/deletions diff (§4) is
+the project's credibility backbone, so half the Legislature needs a different
+mechanism. It is solved but not free — see §4.
+
+Analyses and vote records are PDF for both chambers. They are digitally
+generated, not scanned, so text extraction is tractable; parsing the fiscal
+*tables* will still need real work.
+
+Full technical detail is in [INGEST-NOTES.md](INGEST-NOTES.md).
 
 ---
 
@@ -119,9 +130,32 @@ product's value is fully deterministic and carries zero hallucination risk:
 
 **The strikethrough/underline diff is the credibility backbone.** "This bill
 deletes the words *'shall provide public notice'* from §286.011" is verifiable,
-citable, and impossible to fake. Ship that before any AI feature. It's also the
+citable, and impossible to fake. Ship that before any AI feature. It's the
 thing a legislator can check in ten seconds, which is exactly how you earn the
 right to be believed about the harder claims.
+
+**Verified, and it works for both chambers — by two different routes.**
+
+*Senate (trivial).* The HTML carries `<u class="Insert">` and
+`<s class="Remove">` directly. One CSS selector. CS/CS/CS/SB 1452 alone yields
+1,601 additions and 977 deletions.
+
+*House (geometry, ~50 lines).* PDF only, and body text is black, so colour is
+no help. But Word draws the formatting as thin rules that `pdfplumber` exposes
+as rects, and their vertical position cleanly separates the two cases:
+
+| rule position relative to the glyphs | meaning | measured |
+|---|---|---|
+| below the baseline | **addition** | frac ≈ 1.04 |
+| through the middle | **deletion** | frac ≈ 0.53 |
+
+A prototype over four pages of CS/CS/HB 797 recovered 72 additions and 28
+deletions with no ambiguous cases. The clusters are far enough apart that this
+is robust rather than a heuristic that will rot.
+
+Budget real time for the House path anyway: it needs word-spacing
+reconstruction from character gaps and filtering of the page-footer legend
+(which is itself underlined and struck). Call it a week, not an afternoon.
 
 **Citation-or-it-didn't-happen.** Every LLM-generated claim must carry a character
 span into the source text. A deterministic post-pass then verifies the quoted span
@@ -319,6 +353,7 @@ weaker than yours. That is a real constraint, not a nice-to-have:
 | Small-model output quality is embarrassing | Medium | Eval harness against 2026; quality gate that refuses to publish below threshold |
 | Solo-maintainer bus factor during a 60-day session | Medium | Everything reproducible from raw cache; the deterministic layer keeps working even if the AI pipeline is down |
 | PDF fiscal-table parsing is harder than it looks | Medium | Scope Phase 1 to extraction of the *narrative* fiscal section first; tables later |
+| House diff extraction rots if the House changes its PDF generator | Medium | Golden-file tests over known 2026 House bills; the classifier is geometric, so drift shows up as unclassified rules rather than silent mislabelling — fail loudly |
 | Subscriber PII on shared hosting | Medium | Minimal data (email + prefs only), encrypted at rest, documented retention, no third-party analytics |
 
 ---
@@ -327,11 +362,12 @@ weaker than yours. That is a real constraint, not a nice-to-have:
 
 Anchored to the session calendar. Dates are targets, not commitments.
 
-**Phase 0 — Foundations (Sept 2026, ~3 weeks)**
-Repo skeleton, license, contribution docs, decision records. Scraper spike against
-the **complete 2026 session**: pull all 1,897 bills, text, analyses, votes, history
-into a permanent raw cache. Nothing AI yet. *Exit: we can rebuild the whole 2026
-corpus from scratch, offline.*
+**Phase 0 — Foundations — *substantially done, Aug 2026***
+Repo, MIT license, ingest pipeline, and a full pull of the 2026 session: 1,897
+bills with history, text versions, analyses, votes, amendments, citations and
+companions, zero fetch failures, all cached permanently on disk. *Exit criterion
+met: the corpus rebuilds from cache, offline.* Remaining: contribution docs and
+decision records.
 
 **Phase 1 — The deterministic product (Oct 2026, ~4 weeks)**
 Stage/pathway state machine. Strikethrough/underline diff parser. Statute
