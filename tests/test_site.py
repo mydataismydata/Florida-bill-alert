@@ -442,3 +442,18 @@ def test_a_cite_with_no_page_renders_without_a_link(built):
         for a in soup.select("a.pill[href*='statutes/']"):
             target = out / "statutes" / a["href"].split("statutes/")[1]
             assert target.exists(), f"{page.name} -> {a['href']}"
+
+
+def test_every_template_renders_for_every_bill(built):
+    """A build that raises leaves a half-written tree. The fixture builds 40
+    bills, so this asserts the whole set rendered rather than trusting that
+    the first page did."""
+    out, stats = built
+    assert stats["bills"] == 40
+    for suffix in ("", "-text", "-prompt"):
+        pages = list((out / "bills").glob(f"*{suffix}.html")) if suffix else [
+            p for p in (out / "bills").glob("*.html")
+            if not p.stem.endswith(SUBPAGES)]
+        assert pages, suffix
+        for p in pages:
+            assert p.stat().st_size > 500, p

@@ -17,9 +17,11 @@
 {% if ai %}
 <div class="panel">
   <p class="meta">Answered by <strong>{{ ai.model }}</strong> on {{ ai.generated_at }}.
-  The first attempt runs at temperature {{ '%g'|format(retries[0][1]) }}; a pass
-  that comes back unusable is retried{% if retries|length > 2 %} up to
-  {{ retries|length - 1 }} times{% endif %}, warmer and on a shorter brief.
+  Decoding is greedy, so the same request returns the same answer every time.
+  A pass whose answer fails a check is retried{% if retries|length > 2 %} up to
+  {{ retries|length - 1 }} times{% endif %}, and because re-asking the same
+  question would return the same bytes, the retry is told what was wrong with
+  the answer it is replacing.
   {% if ai.stats and ai.stats.brief_chars and ai.stats.brief_chars != brief_chars %}
   <br><strong>Note:</strong> the stored analysis was produced from a
   {{ '{:,}'.format(ai.stats.brief_chars) }}-character brief, not the
