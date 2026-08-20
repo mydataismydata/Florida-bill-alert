@@ -18,8 +18,6 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .diff import PLAIN, BillDiff, Segment, context_blocks, locate
 from .diff import lines as doc_lines
-from .scope import resolve as resolve_scope
-from .scope import sponsor_districts
 from .stages import kind_of, pathway, track
 
 HERE = Path(__file__).resolve().parent
@@ -93,10 +91,8 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                        " WHERE session=? ORDER BY num,seq", session):
         history.setdefault(r["num"], []).append(dict(r))
 
-    from .scope import POP_DATA
     common = dict(site_name=SITE_NAME, session=session, built=built,
-                  repo=REPO, bill_count=len(bills),
-                  pop_as_of=POP_DATA.get("as_of", ""))
+                  repo=REPO, bill_count=len(bills))
 
     # ---------------------------------------------------------- bill pages
     index_rows, outcomes, enacted = [], {}, []
@@ -116,10 +112,8 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                          session, b["num"])
         loaded = _load_render(db, session, b["num"])
         blocks, all_blocks, stats, version, fmt = [], [], {}, None, None
-        scope = None
         if loaded:
             version, fmt, d = loaded
-            scope = resolve_scope(" ".join(s.text for s in d.segments))
             nchars = sum(len(s.text) for s in d.segments)
             # Anchor each claim to the line its quote sits on, so a reader can
             # jump to the words themselves rather than to the statute at large.
@@ -145,8 +139,6 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
             root="../", b=b, p=prog, path=pathway(prog), refs=refs,
             blocks=blocks, total_blocks=len(all_blocks),
             has_text=loaded is not None,
-            scope=scope,
-            districts=sponsor_districts(b["sponsor"] or "", b["chamber"] or ""),
             total_changes=sum(bk.changed for bk in all_blocks),
             truncated=len(all_blocks) > MAX_BLOCKS, stats=stats,
             analyses=analyses, ai=ai,
