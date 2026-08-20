@@ -213,6 +213,11 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         # counts, and 4,000 statute pages. That is a full build's work, and
         # this path exists to be quick. The front page keeps its previous
         # counts until the next full build.
+        #
+        # The stylesheet is one file and every page depends on it, so it is
+        # copied here too -- skipping it left a rebuilt page styled by the
+        # previous build's CSS.
+        shutil.copy(HERE / "static" / "style.css", out / "style.css")
         return {"bills": len(bills), "statutes": 0, "files": 0, "bytes": 0,
                 "outcomes": outcomes, "partial": True}
 

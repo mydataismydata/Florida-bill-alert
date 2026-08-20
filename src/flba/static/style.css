@@ -301,3 +301,9 @@ form.repull button:disabled { opacity: .55; cursor: progress; }
 .repull-note { font-size: .8rem; color: var(--muted); }
 form.repull.working .repull-note { color: var(--accent); }
 form.repull.failed .repull-note { color: var(--vetoed); }
+
+/* The Legislature's own summary: a single long sentence of drafting prose,
+   not the page's own prose, so it spans the block rather than the measure.
+   Selector matches the shape of `main.wrap > p` above it -- a bare
+   `p.long-title` scores lower and loses. */
+main.wrap > p.long-title { max-width: none; }
