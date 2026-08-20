@@ -307,3 +307,7 @@ form.repull.failed .repull-note { color: var(--vetoed); }
    Selector matches the shape of `main.wrap > p` above it -- a bare
    `p.long-title` scores lower and loses. */
 main.wrap > p.long-title { max-width: none; }
+
+/* A full URL is worth showing whole -- it says where the record lives and
+   survives being printed or copied -- but it must not force the table wide. */
+a.url { word-break: break-all; }

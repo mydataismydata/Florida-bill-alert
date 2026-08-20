@@ -43,6 +43,31 @@ def _rows(db, sql, *args):
     return db.execute(sql, args).fetchall()
 
 
+# House committees carry the word in their name; Senate ones do not -- "Rules"
+# and "Judiciary" are committees, and so are "Martin" and "McClain" as far as
+# any pattern can tell. So the Senate names are matched against the vocabulary
+# the deterministic layer already collected rather than guessed at.
+_COMMITTEE_WORD = re.compile(r"\b(?:Committee|Subcommittee)\b")
+
+
+def split_sponsor(sponsor: str, committees: set) -> tuple[list, list]:
+    """Separate the committees that produced substitutes from the members who
+    filed the bill.
+
+    A bill that has been through three committees reads "Rules; Judiciary;
+    Community Affairs; McClain", and only the last of those is a person anyone
+    can write to. Across the 2026 session a committee never follows a member in
+    this field, but the split does not rely on position -- it names them.
+    """
+    people, panels = [], []
+    for part in (p.strip() for p in (sponsor or "").split(";")):
+        if not part:
+            continue
+        (panels if part in committees or _COMMITTEE_WORD.search(part)
+         else people).append(part)
+    return panels, people
+
+
 def _load_ai(db, session, num):
     row = db.execute("SELECT * FROM analysis_ai WHERE session=? AND num=?",
                      (session, num)).fetchone()
@@ -116,6 +141,9 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     if not bills:
         raise SystemExit(f"no bills ingested for session {session}")
 
+    committees = {r["name"] for r in
+                  _rows(db, "SELECT DISTINCT name FROM committee_ref")}
+
     history: dict[int, list] = {}
     for r in _rows(db, "SELECT num,date,chamber,action FROM history"
                        " WHERE session=? ORDER BY num,seq", session):
@@ -184,8 +212,10 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                             for n in P.ORDER],
                     **common), encoding="utf-8")
 
+        _panels, members = split_sponsor(b["sponsor"] or "", committees)
         html = env.get_template("bill.html").render(
             root="../", b=b, p=prog, path=pathway(prog), refs=refs,
+            members=members, sponsor_has_committees=bool(_panels),
             blocks=blocks, total_blocks=len(all_blocks),
             has_text=loaded is not None,
             total_changes=sum(bk.changed for bk in all_blocks),

@@ -261,3 +261,86 @@ def test_the_published_prompt_is_the_prompt_that_gets_sent(built):
     assert _html.unescape(blocks[0]) == sent[0]["content"]
     shown = _html.unescape(_re.sub(r"<[^>]+>", "", blocks[1]))
     assert shown.rsplit("\n\nTASK", 1)[0] == sent[1]["content"].rsplit("\n\nTASK", 1)[0]
+
+
+# --- pulling the member out of a committee chain ---------------------------
+
+COMMITTEES = {"Rules", "Judiciary", "Community Affairs", "Criminal Justice",
+              "Appropriations"}
+
+
+def test_the_member_is_separated_from_the_committees():
+    """A bill through three committees reads "Rules; Judiciary; Community
+    Affairs; McClain", and only the last is someone to write to."""
+    from flba.site import split_sponsor
+    panels, people = split_sponsor(
+        "Rules; Judiciary; Community Affairs; McClain", COMMITTEES)
+    assert panels == ["Rules", "Judiciary", "Community Affairs"]
+    assert people == ["McClain"]
+
+
+def test_house_committees_are_recognised_by_their_name():
+    """House panels carry the word; the Senate vocabulary does not cover them."""
+    from flba.site import split_sponsor
+    panels, people = split_sponsor("Criminal Justice Subcommittee; Baker", set())
+    assert panels == ["Criminal Justice Subcommittee"] and people == ["Baker"]
+
+
+def test_two_members_and_no_committee():
+    from flba.site import split_sponsor
+    panels, people = split_sponsor("Mooney; LaMarca", COMMITTEES)
+    assert panels == [] and people == ["Mooney", "LaMarca"]
+
+
+def test_a_committee_bill_has_no_member_to_name():
+    """The appropriations bills are filed by the committee itself."""
+    from flba.site import split_sponsor
+    panels, people = split_sponsor("Appropriations", COMMITTEES)
+    assert panels == ["Appropriations"] and people == []
+
+
+def test_no_committee_ever_trails_a_member_in_the_corpus():
+    """The split names them rather than relying on order, but if the order
+    ever broke it would mean the field means something else."""
+    import sqlite3
+    from flba.site import split_sponsor
+    db = sqlite3.connect(str(DB))
+    db.row_factory = sqlite3.Row
+    known = {r["name"] for r in db.execute("SELECT DISTINCT name FROM committee_ref")}
+    for r in db.execute("SELECT label,sponsor FROM bill"
+                        " WHERE session='2026' AND sponsor<>''"):
+        panels, people = split_sponsor(r["sponsor"], known)
+        assert r["sponsor"].strip().startswith(tuple(panels) or ("",)), r["label"]
+        assert len(panels) + len(people) == len(
+            [p for p in r["sponsor"].split(";") if p.strip()]), r["label"]
+
+
+def test_the_filed_by_row_only_appears_when_it_adds_something(built):
+    """Repeating the Sponsor row verbatim would be noise on 1,230 bills."""
+    from bs4 import BeautifulSoup
+    out, _ = built
+    seen_plain = seen_chain = 0
+    for page in (out / "bills").glob("*.html"):
+        if page.stem.endswith(SUBPAGES):
+            continue
+        soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
+        cells = {th.get_text(strip=True): th.find_next("td").get_text(strip=True)
+                 for th in soup.select("div.panel th")}
+        if "Filed by" in cells:
+            assert ";" in cells["Sponsor"], page          # only for chains
+            assert cells["Filed by"] != cells["Sponsor"], page
+            seen_chain += 1
+        elif "Sponsor" in cells:
+            seen_plain += 1
+    assert seen_chain and seen_plain
+
+
+def test_the_official_record_shows_the_whole_url(built):
+    from bs4 import BeautifulSoup
+    out, _ = built
+    page = sorted(p for p in (out / "bills").glob("*.html")
+                  if not p.stem.endswith(SUBPAGES))[0]
+    soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
+    a = soup.select_one("div.panel a.url")
+    assert a and a.get_text(strip=True) == a["href"]
+    assert a["href"].startswith("https://www.flsenate.gov/")
