@@ -42,6 +42,14 @@ def load_bill(db, session: str, num: int):
     return dict(bill), render["version"], BillDiff(render["fmt"], segs), refs
 
 
+def summary_prose(data: dict) -> str:
+    """The summary pass's prose as one string, for checking."""
+    body = data.get("summary") or []
+    parts = [data.get("one_line") or ""]
+    parts += body if isinstance(body, list) else [str(body)]
+    return " ".join(p for p in parts if p)
+
+
 @dataclass
 class Analysis:
     session: str
@@ -72,6 +80,8 @@ def analyze(db, session: str, num: int, backend: Backend,
 
     brief = build_brief(bill, diff, refs, budget=budget)
     verifier = Verifier(source_text(diff))
+    # What the bill actually strikes, for checking claims of repeal against.
+    deleted_text = " ".join(s.text for s in diff.deletions)
     out = Analysis(session=session, num=num, label=bill.get("label", ""),
                    version=version, model=backend.model)
     t0 = time.time()
@@ -90,10 +100,19 @@ def analyze(db, session: str, num: int, backend: Backend,
             why = is_degenerate(reply.text)
             if why is None:
                 try:
-                    data = reply.json()
-                    break
+                    parsed = reply.json()
                 except json.JSONDecodeError:
                     why = "unparseable JSON"
+                else:
+                    # A summary that reverses the bill is worse than no
+                    # summary at all, so a contradicted one is re-rolled and
+                    # then abandoned rather than published.
+                    why = (P.flags_false_repeal(summary_prose(parsed),
+                                                deleted_text)
+                           if name == "summary" else None)
+                    if why is None:
+                        data = parsed
+                        break
             out.failures.append({"pass": name, "attempt": attempt + 1,
                                  "reason": why, "brief_scale": shrink})
             log(f"    {name}: attempt {attempt + 1} unusable ({why})")

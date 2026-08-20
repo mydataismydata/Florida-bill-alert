@@ -4,7 +4,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from flba.analysis.passes import flags_intent, flags_inverted_prohibition
+from flba.analysis.brief import render_passage
+from flba.analysis.passes import (flags_false_repeal, flags_intent,
+                                  flags_inverted_prohibition)
+from flba.diff import DELETE, INSERT, PLAIN, Segment
 from flba.analysis.verify import Verifier, is_degenerate, verify_claims
 
 SRC = ("The non-ad valorem special assessment may not be levied against the "
@@ -83,3 +86,66 @@ def test_an_exact_span_verifies():
 
 def test_padded_output_is_rejected():
     assert is_degenerate('{"reading": "}' + "\n" * 60)
+
+
+# --- claiming a repeal the bill never makes --------------------------------
+
+# CS/CS/SB 182 added a prohibition on academic dismissal from charter schools
+# and deleted nothing but "shall", "state" and three list numbers. It came
+# back summarised as removing an "academic dismissal ban".
+SB182_DELETIONS = "remaining funds have reverted to the state shall state 1. 2. 3."
+
+
+def test_a_repeal_the_bill_never_makes_is_flagged():
+    assert flags_false_repeal(
+        "Removes academic dismissal ban, mandates cursive, and eases zoning.",
+        SB182_DELETIONS)
+
+
+def test_a_real_repeal_is_not_flagged():
+    """The bill genuinely strikes the duty, so the claim stands."""
+    assert not flags_false_repeal(
+        "Removes the requirement that districts report annually.",
+        "shall report annually to the department")
+
+
+def test_a_repeal_of_a_prohibition_needs_a_struck_prohibition():
+    struck = "a school district may not charge a fee for the transfer"
+    assert not flags_false_repeal("Lifts the ban on transfer fees.", struck)
+    assert flags_false_repeal("Lifts the ban on transfer fees.", "shall 1. 2.")
+
+
+def test_ordinary_summaries_are_not_flagged():
+    """Every guard here has failed by being too eager, so the common shapes
+    of an honest summary must pass untouched."""
+    for line in (
+        "Requires public schools to teach cursive writing in grades 3 through 5.",
+        "Charter schools may not dismiss students for poor grades.",
+        "Creates a new exemption for data centers and removes a tax credit cap.",
+        "Bars local governments from levying the assessment.",
+    ):
+        assert not flags_false_repeal(line, ""), line
+
+
+# --- one marker per edit, not one per line ---------------------------------
+
+def test_a_multi_line_edit_becomes_one_span():
+    """The parser emits a segment per line of the Legislature's layout. Four
+    consecutive INSERT segments are one added sentence, not four."""
+    parts = [Segment(PLAIN, "school.", 84, None),
+             Segment(INSERT, "A student may not be dismissed based on academic", 84, None),
+             Segment(INSERT, "performance while a school is implementing a school", 85, None),
+             Segment(INSERT, "improvement plan pursuant to s. 1002.345.", 86, None),
+             Segment(PLAIN, "6. Students articulating", 88, None)]
+    out = render_passage(parts)
+    assert out.count("[[+") == 1
+    assert ("[[+A student may not be dismissed based on academic performance "
+            "while a school is implementing a school improvement plan "
+            "pursuant to s. 1002.345.+]]") in out
+
+
+def test_runs_of_different_kinds_stay_separate():
+    parts = [Segment(INSERT, "new one", 1, None), Segment(INSERT, "new two", 2, None),
+             Segment(DELETE, "old one", 3, None), Segment(INSERT, "new three", 4, None)]
+    out = render_passage(parts)
+    assert out == "[[+new one new two+]] [[-old one-]] [[+new three+]]"

@@ -41,8 +41,16 @@ passages into one quote and never drop words from the middle. A short exact \
 quote is worth more than a long approximate one; a quote that is not \
 word-for-word will be discarded and your claim lost with it.
 - [[+text+]] is language being ADDED to Florida law. [[-text-]] is language \
-being DELETED from it. What a bill deletes is often more consequential than \
-what it adds.
+being DELETED from it. Unmarked text is existing law, shown for context, and \
+is NOT changing.
+- Read direction off the markers, never off the words inside them. A \
+prohibition inside [[+ +]] is a NEW restriction the bill creates; those same \
+words inside [[- -]] would be an existing restriction it repeals. Calling \
+added language a removal states the exact opposite of what the bill does.
+- Deletions are easy to miss and often matter, so say plainly when a \
+requirement, protection or limit is being repealed -- but only when those \
+words sit inside [[- -]]. A bill that deletes nothing of substance repeals \
+nothing. Do not reach for a repeal that is not there.
 - Never speculate about anyone's motives, party, or intent. Describe what the \
 text does and what it permits.
 
@@ -63,8 +71,8 @@ The final line of the message names which task to perform.
 
 TASK summary
 Say what actually changes for people in practice, not what the bill is \
-"about". If it deletes an existing requirement, protection, or limit, say so \
-plainly -- that is usually the most important thing about a bill.
+"about". Lead with whichever change reaches the most people or hits them \
+hardest, whether that change creates a duty or removes one.
 
 The one-line field must be a SHORT verb phrase naming the single most \
 important effect -- 6 to 12 words, starting with a verb. The reader already \
@@ -167,6 +175,45 @@ PERMISSION = re.compile(
 NEGATED = re.compile(
     r"\b(?:cannot|can no longer|can't|may not|is not|are not|no longer|"
     r"not permitted|not allowed|prohibited|barred|prevented|unable)\b", re.I)
+
+
+# The summary pass carries no quotes, so the quote verifier cannot reach it.
+# What can still be checked is direction. A bill cannot repeal a prohibition it
+# never deletes -- SB 182 added three prohibitions, deleted none, and came back
+# summarised as removing an "academic dismissal ban", a claim its own diff
+# refutes outright.
+#
+# Strict on purpose. Every guard in this project has failed by being too eager,
+# so this one fires only when the deleted text contains no matching language
+# whatsoever. A bill that strikes any duty may be described as removing a
+# requirement; only a bill that strikes nothing of the kind is contradicted.
+REPEAL_CLAIM = re.compile(
+    r"\b(?:remov\w+|repeal\w+|eliminat\w+|strip\w+|rescind\w+|revok\w+|"
+    r"delet\w+|abolish\w+|lifts?|lifted|lifting|does away with)\b"
+    r"[^.;]{0,70}?"
+    r"\b(?P<what>bans?|prohibitions?|protections?|restrictions?|bar|safeguards?|"
+    r"requirements?|mandates?|duty|duties|obligations?)\b",
+    re.I)
+
+DUTY = re.compile(r"\b(?:shall|must|is required|are required|required to|"
+                  r"may not|shall not)\b", re.I)
+
+# Which body of struck language would have to exist for the claim to be true.
+_BARRIER_WORDS = {"ban", "bans", "prohibition", "prohibitions", "protection",
+                  "protections", "restriction", "restrictions", "bar",
+                  "safeguard", "safeguards"}
+
+
+def flags_false_repeal(text: str, deleted: str) -> str | None:
+    """Catch a claim that the bill repeals something it never deletes."""
+    for m in REPEAL_CLAIM.finditer(text or ""):
+        want = (PROHIBITION if m.group("what").lower() in _BARRIER_WORDS
+                else DUTY)
+        if not want.search(deleted or ""):
+            claim = " ".join(m.group(0).split())
+            return (f"claims a repeal ({claim!r}) but the bill deletes no "
+                    f"such language")
+    return None
 
 
 def flags_inverted_prohibition(consequence: str, quote: str) -> str | None:

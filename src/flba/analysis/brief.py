@@ -30,15 +30,37 @@ def strip_markers(text: str) -> str:
     return MARKERS.sub("", text)
 
 
-def render_passage(parts) -> str:
-    out = []
+def runs(parts):
+    """Group consecutive parts that share a kind."""
+    grouped = []
     for p in parts:
-        if p.kind == INSERT:
-            out.append(f"{ADD_OPEN}{p.text}{ADD_CLOSE}")
-        elif p.kind == DELETE:
-            out.append(f"{DEL_OPEN}{p.text}{DEL_CLOSE}")
+        if grouped and grouped[-1][0] == p.kind:
+            grouped[-1][1].append(p.text)
         else:
-            out.append(p.text)
+            grouped.append((p.kind, [p.text]))
+    return grouped
+
+
+def render_passage(parts) -> str:
+    """One marker span per contiguous edit, not one per line.
+
+    The parser emits a segment per line of the Legislature's own layout, so a
+    single added sentence arrives as four consecutive INSERT segments. Marking
+    each separately put 2.4x more markers in the brief than there were edits,
+    and chopped added sentences into fragments -- which is how a bill that
+    added a prohibition came back summarised as repealing one. Runs are joined
+    with the same single space used between parts, so the text itself is
+    unchanged and quotes still verify against the source.
+    """
+    out = []
+    for kind, texts in runs(parts):
+        body = " ".join(texts)
+        if kind == INSERT:
+            out.append(f"{ADD_OPEN}{body}{ADD_CLOSE}")
+        elif kind == DELETE:
+            out.append(f"{DEL_OPEN}{body}{DEL_CLOSE}")
+        else:
+            out.append(body)
     return " ".join(out)
 
 
@@ -85,11 +107,18 @@ def build(bill: dict, diff: BillDiff, refs: list[dict],
     keep.sort(key=lambda kv: kv[0])
 
     if keep:
+        # The balance is stated because it is checkable and the model cannot
+        # reason its way past it. A bill that deletes eleven words is not
+        # repealing a protection, however much the added text sounds like one.
+        added = sum(len(s.text.split()) for s in diff.insertions)
+        removed = sum(len(s.text.split()) for s in diff.deletions)
         lines.append(
             f"\nCHANGED LANGUAGE ({len(keep)} of {len(blocks)} passages). "
             f"{ADD_OPEN}text{ADD_CLOSE} is being ADDED to law; "
             f"{DEL_OPEN}text{DEL_CLOSE} is being DELETED from law. "
-            f"Line numbers are the Legislature's own.")
+            f"Unmarked text is existing law, shown for context, and is not "
+            f"changing. In total this bill adds {added:,} words and deletes "
+            f"{removed:,}. Line numbers are the Legislature's own.")
         for _, blk, body in keep:
             at = f"line {blk.line}" if blk.line else "—"
             lines.append(f"\n[{at}] {body}")
