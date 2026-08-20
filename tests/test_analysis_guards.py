@@ -5,8 +5,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from flba.analysis.brief import render_passage
-from flba.analysis.passes import (flags_false_repeal, flags_intent,
-                                  flags_inverted_prohibition)
+from flba.analysis.passes import (flags_cut_headline, flags_false_repeal,
+                                  flags_intent, flags_inverted_prohibition)
+from flba.analysis.schema import ONE_LINE_MAX
 from flba.diff import DELETE, INSERT, PLAIN, Segment
 from flba.analysis.verify import Verifier, is_degenerate, verify_claims
 
@@ -149,3 +150,32 @@ def test_runs_of_different_kinds_stay_separate():
              Segment(DELETE, "old one", 3, None), Segment(INSERT, "new three", 4, None)]
     out = render_passage(parts)
     assert out == "[[+new one new two+]] [[-old one-]] [[+new three+]]"
+
+
+# --- a headline cut off at the schema's cap ---------------------------------
+
+def test_a_headline_cut_at_the_cap_is_rejected():
+    """Constrained decoding closes the string at maxLength wherever the model
+    is, so SB 686 lost the noun off the end of "for agricultural"."""
+    cut = "Replaces comprehensive plan amendment process with direct development approval for agricultural"
+    assert len(cut) <= ONE_LINE_MAX
+    assert flags_cut_headline(cut)
+
+
+def test_a_complete_headline_at_the_cap_is_kept():
+    """Length alone is not the fault -- stopping mid-phrase is."""
+    line = "Bars local governments from levying assessments on recreational vehicle parking spaces."
+    assert not flags_cut_headline(line)
+
+
+def test_a_short_headline_is_never_flagged():
+    assert not flags_cut_headline("Mandates cursive instruction in grades 3 through 5")
+    assert not flags_cut_headline("")
+
+
+def test_the_schema_no_longer_spells_out_a_bad_example():
+    """A negative example written out in full is a phrase the model copies."""
+    from flba.analysis.schema import SUMMARY
+    desc = SUMMARY["properties"]["one_line"]["description"]
+    assert "Bad:" not in desc
+    assert "Good:" in desc

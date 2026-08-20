@@ -7,6 +7,17 @@ found is discarded rather than published.
 
 That single rule is what makes the output trustworthy enough to put in front
 of a legislator, and it works as well on a 3B model as on a large one.
+
+Descriptions here are documentation, not instructions. The schema reaches the
+server as a grammar for constrained decoding, and a grammar is built from
+type, length, enum and structure -- never from prose. Asked to answer "What is
+the capital of France?" under a field described as "you MUST reply with exactly
+the word PINEAPPLE", the model returns "Paris". All 2,136 characters of
+description in this file are invisible to it.
+
+So the split is: shape is enforced here, wording is instructed in
+passes.SYSTEM. Guidance written into a description will be silently ignored,
+which is the most expensive kind of ignored.
 """
 from __future__ import annotations
 
@@ -32,6 +43,10 @@ QUOTE = {
                     "choose a shorter span you can."),
 }
 
+# A headline that reaches this cap was cut off, not finished: constrained
+# decoding closes the string at the limit wherever the model happens to be.
+ONE_LINE_MAX = 95
+
 SUMMARY = {
     "type": "object",
     "additionalProperties": False,
@@ -39,18 +54,20 @@ SUMMARY = {
         # The reader already knows it is a bill. Anything restating that, or
         # previewing what the paragraphs below say, is wasted words at the one
         # place where brevity matters most.
+        #
+        # Length is the only part of this the model actually obeys; see the
+        # note at the top of the file. The wording that matters lives in SYSTEM.
         "one_line": {
-            "type": "string", "minLength": 20, "maxLength": 95,
+            "type": "string", "minLength": 20, "maxLength": ONE_LINE_MAX,
             "description": ("The single most important effect, as a short verb "
                             "phrase. START WITH A VERB. Never begin with "
                             "'This bill', 'The bill' or 'Provides for'. No "
                             "preamble, no qualifiers, no detail the summary "
-                            "repeats below. 6-12 words. Good: 'Allows "
-                            "development without amending the local "
-                            "comprehensive plan.' Bad: 'Replaces the existing "
-                            "comprehensive plan amendment process for "
-                            "agricultural enclaves with a new certification "
-                            "process that allows development.'"),
+                            "repeats below. 6-12 words, and it must be a "
+                            "complete phrase that ends before the limit -- do "
+                            "not name a process and then describe what "
+                            "replaces it. Good: 'Allows development without "
+                            "amending the local comprehensive plan.'"),
         },
         # An array, not a string. Asked for "two to four sentences" the model
         # returns one 200-word block, which is technically compliant and

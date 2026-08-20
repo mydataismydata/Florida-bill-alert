@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 
-from .schema import IMPLICATIONS, PROVISIONS, SUMMARY
+from .schema import IMPLICATIONS, ONE_LINE_MAX, PROVISIONS, SUMMARY
 
 SYSTEM = """You explain Florida legislation to people who must act on it: \
 legislators voting on the bill, and members of the public petitioning them.
@@ -75,9 +75,13 @@ Say what actually changes for people in practice, not what the bill is \
 hardest, whether that change creates a duty or removes one.
 
 The one-line field must be a SHORT verb phrase naming the single most \
-important effect -- 6 to 12 words, starting with a verb. The reader already \
-knows it is a bill, so never write "This bill ...", and never preview what the \
-paragraphs below will say. Cut every qualifier that is not load-bearing.
+important effect -- 6 to 12 words, starting with a verb, ending in a full \
+stop. The reader already knows it is a bill, so never write "This bill ...", \
+and never preview what the paragraphs below will say. Cut every qualifier that \
+is not load-bearing. Name the effect, not the machinery: say what becomes \
+possible or forbidden, never "replaces X with Y" or "changes the process \
+for Z". A hard limit cuts this field off mid-word, so if it will not fit in \
+twelve words you have written the wrong sentence -- write a shorter one.
 
 Then give two to four SHORT paragraphs of 25-45 words, one point each. Do not \
 write a single long block.
@@ -175,6 +179,19 @@ PERMISSION = re.compile(
 NEGATED = re.compile(
     r"\b(?:cannot|can no longer|can't|may not|is not|are not|no longer|"
     r"not permitted|not allowed|prohibited|barred|prevented|unable)\b", re.I)
+
+
+# Constrained decoding closes a string the moment it hits maxLength, wherever
+# the model happens to be -- so a headline at the cap was cut, not written.
+# SB 686 came back "...direct development approval for agricultural", missing
+# the noun. Re-rolling is cheap and usually lands shorter.
+def flags_cut_headline(one_line: str) -> str | None:
+    line = (one_line or "").rstrip()
+    if len(line) < ONE_LINE_MAX - 2:
+        return None
+    if line.endswith((".", "!", "?")):
+        return None
+    return f"headline cut at the {ONE_LINE_MAX}-character limit ({line[-24:]!r})"
 
 
 # The summary pass carries no quotes, so the quote verifier cannot reach it.

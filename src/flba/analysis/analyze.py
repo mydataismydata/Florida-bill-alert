@@ -23,6 +23,9 @@ def tidy_statute(cite: str) -> str:
 
 KIND_NAMES = {0: "plain", 1: "insert", 2: "delete"}
 
+# (brief scale, temperature) per attempt.
+RETRIES = ((1.0, 0.0), (1.0, 0.7), (0.4, 0.7))
+
 
 def load_bill(db, session: str, num: int):
     """Assemble everything the analysis needs from the deterministic layer."""
@@ -88,15 +91,19 @@ def analyze(db, session: str, num: int, backend: Backend,
 
     for name in P.ORDER:
         data, reply = None, None
-        # A shorter brief reliably recovers a pass that degenerates on the
-        # full one, so retry smaller rather than dropping the bill.
-        for attempt, shrink in enumerate((1.0, 0.4)):
+        # Two levers, because the faults have two shapes. A shorter brief
+        # recovers a pass that degenerates on the full one. Temperature
+        # recovers a pass that produced clean JSON saying the wrong thing --
+        # at temperature 0 a retry on the same brief is byte-identical, so
+        # without this the ladder silently re-asks and re-fails.
+        for attempt, (shrink, temp) in enumerate(RETRIES):
             text = (brief["text"] if shrink == 1.0 else
                     build_brief(bill, diff, refs,
                                 budget=int(budget * shrink))["text"])
             reply = backend.chat(P.messages(text, name),
                                  schema=P.SCHEMAS[name],
-                                 max_tokens=P.BUDGET[name])
+                                 max_tokens=P.BUDGET[name],
+                                 temperature=temp)
             why = is_degenerate(reply.text)
             if why is None:
                 try:
@@ -109,12 +116,14 @@ def analyze(db, session: str, num: int, backend: Backend,
                     # then abandoned rather than published.
                     why = (P.flags_false_repeal(summary_prose(parsed),
                                                 deleted_text)
+                           or P.flags_cut_headline(parsed.get("one_line", ""))
                            if name == "summary" else None)
                     if why is None:
                         data = parsed
                         break
             out.failures.append({"pass": name, "attempt": attempt + 1,
-                                 "reason": why, "brief_scale": shrink})
+                                 "reason": why, "brief_scale": shrink,
+                                 "temperature": temp})
             log(f"    {name}: attempt {attempt + 1} unusable ({why})")
 
         if data is None:
