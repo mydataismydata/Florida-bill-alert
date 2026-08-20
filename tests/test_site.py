@@ -327,7 +327,11 @@ def test_the_filed_by_row_only_appears_when_it_adds_something(built):
         cells = {th.get_text(strip=True): th.find_next("td").get_text(strip=True)
                  for th in soup.select("div.panel th")}
         if "Filed by" in cells:
-            assert ";" in cells["Sponsor"], page          # only for chains
+            # It earns its place either by digging the member out of a
+            # committee chain, or by carrying detail the Sponsor row lacks.
+            digs_out = ";" in cells["Sponsor"]
+            adds_detail = "District" in cells["Filed by"]
+            assert digs_out or adds_detail, page
             assert cells["Filed by"] != cells["Sponsor"], page
             seen_chain += 1
         elif "Sponsor" in cells:
@@ -344,3 +348,73 @@ def test_the_official_record_shows_the_whole_url(built):
     a = soup.select_one("div.panel a.url")
     assert a and a.get_text(strip=True) == a["href"]
     assert a["href"].startswith("https://www.flsenate.gov/")
+
+
+# --- links off the site ----------------------------------------------------
+
+def test_external_links_open_in_a_new_tab_and_internal_ones_do_not(built):
+    """Enumerating the templates by hand misses the next link somebody adds,
+    so the invariant is asserted over the built pages instead."""
+    from urllib.parse import urlparse
+    from bs4 import BeautifulSoup
+    out, _ = built
+    external, missing, wrong = 0, [], []
+    for page in out.rglob("*.html"):
+        soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
+        for a in soup.find_all("a", href=True):
+            if urlparse(a["href"]).scheme in ("http", "https"):
+                external += 1
+                if a.get("target") != "_blank" or "noopener" not in (a.get("rel") or []):
+                    missing.append((page.name, a["href"]))
+            elif a.get("target") == "_blank":
+                wrong.append((page.name, a["href"]))
+    assert external > 0
+    assert not missing, missing[:5]
+    assert not wrong, wrong[:5]
+
+
+def test_a_chapter_pill_without_a_url_is_not_a_link(built):
+    """A link to "#" that opens a blank tab is worse than plain text."""
+    from bs4 import BeautifulSoup
+    out, _ = built
+    for page in (out / "bills").glob("*.html"):
+        if page.stem.endswith(SUBPAGES):
+            continue
+        soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
+        for a in soup.select("span.pill a"):
+            assert a["href"] != "#", page.name
+
+
+# --- who filed it ----------------------------------------------------------
+
+def test_a_senate_sponsor_carries_a_link_district_and_party(built):
+    from bs4 import BeautifulSoup
+    out, _ = built
+    found = 0
+    for page in (out / "bills").glob("*.html"):
+        if page.stem.endswith(SUBPAGES):
+            continue
+        soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
+        th = soup.find("th", string="Filed by")
+        if not th:
+            continue
+        a = th.find_next("td").find("a")
+        if not a:
+            continue
+        assert "/Senators/" in a["href"]
+        assert a["target"] == "_blank"
+        text = th.find_next("td").get_text(" ", strip=True)
+        assert "District" in text, text
+        found += 1
+    assert found, "no bill rendered a linked sponsor"
+
+
+def test_a_party_is_never_truncated_to_a_single_word_fragment():
+    """A member who leaves a party sits as "No Party Affiliation"."""
+    from flba.sources.flsenate import parse_senator_page
+    html = ('<div class="senator"><h2>Senator Jason W. B. "Jay" Pizzo</h2>'
+            '<p class="bold">Party: No Party Affiliation</p></div>')
+    rec = parse_senator_page(html, "https://www.flsenate.gov/Senators/S37")
+    assert rec["party"] == "No Party Affiliation"
+    assert rec["district"] == 37
+    assert rec["name"] == "Jason W. B. Pizzo"

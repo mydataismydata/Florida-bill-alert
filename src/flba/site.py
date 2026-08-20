@@ -143,6 +143,9 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
 
     committees = {r["name"] for r in
                   _rows(db, "SELECT DISTINCT name FROM committee_ref")}
+    # Keyed by the member page URL, which is what a bill row already carries.
+    members_by_url = {r["url"]: dict(r) for r in
+                      _rows(db, "SELECT * FROM member")}
 
     history: dict[int, list] = {}
     for r in _rows(db, "SELECT num,date,chamber,action FROM history"
@@ -213,9 +216,11 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                     **common), encoding="utf-8")
 
         _panels, members = split_sponsor(b["sponsor"] or "", committees)
+        member = members_by_url.get(b["sponsor_url"] or "")
         html = env.get_template("bill.html").render(
             root="../", b=b, p=prog, path=pathway(prog), refs=refs,
             members=members, sponsor_has_committees=bool(_panels),
+            member=member,
             blocks=blocks, total_blocks=len(all_blocks),
             has_text=loaded is not None,
             total_changes=sum(bk.changed for bk in all_blocks),

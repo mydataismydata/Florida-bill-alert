@@ -530,6 +530,45 @@ def cmd_statutes(args) -> int:
     return 0
 
 
+def cmd_members(args) -> int:
+    """Fetch the Senate's page for every member who has sponsored a bill.
+
+    The Senate publishes a page per member, carrying their party; the district
+    is already in the URL. The House publishes nothing here, so a House
+    sponsor stays a bare surname with nothing to link to.
+    """
+    from .sources.flsenate import district_of, parse_senator_page
+
+    store = Store(DATA / "index.sqlite")
+    fetcher = PoliteFetcher(DATA / "raw")
+    urls = [r["sponsor_url"] for r in store.db.execute(
+        "SELECT DISTINCT sponsor_url FROM bill"
+        " WHERE session=? AND sponsor_url<>'' ORDER BY sponsor_url",
+        (args.session,))]
+    if not urls:
+        print(f"no sponsor links for session {args.session} -- run: flba bills")
+        return 1
+
+    print(f"members: {len(urls)} Senate pages")
+    saved = 0
+    for i, url in enumerate(urls, 1):
+        r = fetcher.fetch(url, force=args.refresh)
+        if not r.ok:
+            print(f"  {url} -> HTTP {r.status}")
+            continue
+        rec = parse_senator_page(r.text(), url)
+        if rec["district"] is None or not rec["party"]:
+            print(f"  {url} -> could not read district/party")
+            continue
+        store.save_member("Senate", rec["district"], rec["name"],
+                          rec["party"], url)
+        saved += 1
+        if i % 10 == 0 or i == len(urls):
+            print(f"  {i}/{len(urls)}")
+    print(f"\nmembers: {saved} stored")
+    return 0
+
+
 def cmd_build(args) -> int:
     """Render the static site the public server will serve."""
     from .site import build
@@ -683,7 +722,7 @@ def main(argv=None) -> int:
                      ("diff", cmd_diff), ("track", cmd_track),
                      ("crossref", cmd_crossref), ("statutes", cmd_statutes),
                      ("analyze", cmd_analyze), ("build", cmd_build),
-                     ("status", cmd_status)):
+                     ("members", cmd_members), ("status", cmd_status)):
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
         sp.add_argument("--refresh", action="store_true",

@@ -212,3 +212,25 @@ description of the prompt rather than the prompt.
 
 These pages need no model and no network to build, so they ship with the
 public site.
+
+## Members
+
+Bill pages name the member who filed the bill, with a link to their page and
+their district and party:
+
+```bash
+flba --session 2026 members
+```
+
+That fetches one page per member who has sponsored a bill -- 37 for the 2026
+session, about as many seconds at the site's crawl delay -- and reads the party
+off each. The district is already in the URL the bill page carries.
+
+**Senate only.** flsenate.gov publishes a page per senator and links to it from
+every Senate bill. House sponsors appear on the same site as a bare surname
+with no link and nothing behind it, so a House bill names its member and stops
+there. Covering the House would mean adding myfloridahouse.gov as a second
+source; nothing else in the project reads from it today.
+
+Re-run the command when the chamber changes -- membership, party or district.
+It is cheap and the raw pages are cached.

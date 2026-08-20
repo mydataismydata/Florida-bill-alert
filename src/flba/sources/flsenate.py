@@ -298,3 +298,46 @@ def parse_bill_page(html: str, session: str, num: int) -> dict:
     rec["related"] = related
 
     return rec
+
+
+# The Senate publishes a page per member; the House does not appear here at
+# all, so a House sponsor stays a bare surname on this site and there is
+# nothing to link to.
+_DISTRICT_IN_URL = re.compile(r"/Senators/[Ss](\d+)\b")
+# Not an enumeration: a member who leaves a party sits as "No Party
+# Affiliation", and listing the parties truncated that to "No".
+_PARTY = re.compile(r"^Party:\s*(\S.*?)\s*$")
+# "Senator Shevrin D. "Shev" Jones" -- the nickname is the Senate's own markup,
+# not something to render back at a reader.
+_NICKNAME = re.compile(r'\s*"[^"]*"\s*')
+
+
+def senator_url(district: int) -> str:
+    return f"{BASE}/Senators/S{district}"
+
+
+def district_of(url: str) -> int | None:
+    m = _DISTRICT_IN_URL.search(url or "")
+    return int(m.group(1)) if m else None
+
+
+def parse_senator_page(html: str, url: str) -> dict:
+    """Name, party and district for one member, from their Senate page."""
+    soup = BeautifulSoup(html, "html.parser")
+    rec = {"url": url, "district": district_of(url), "name": "", "party": ""}
+
+    for p in soup.select("p"):
+        m = _PARTY.search(_txt(p))
+        if m:
+            rec["party"] = m.group(1)
+            break
+
+    # The heading sits above the party line in div.senator; the page's own <h1>
+    # is the chamber's name, which is no use.
+    block = soup.select_one("div.senator")
+    for node in (block.find_all(["h2", "h3", "h4"]) if block else []):
+        text = _txt(node)
+        if text.startswith("Senator "):
+            rec["name"] = _NICKNAME.sub(" ", text[len("Senator "):]).strip()
+            break
+    return rec

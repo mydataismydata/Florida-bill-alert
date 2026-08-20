@@ -102,6 +102,12 @@ CREATE TABLE IF NOT EXISTS change (
     PRIMARY KEY (session, num, version, seq)
 );
 
+CREATE TABLE IF NOT EXISTS member (
+    chamber TEXT, district INTEGER, name TEXT, party TEXT, url TEXT,
+    fetched_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (chamber, district)
+);
+
 CREATE TABLE IF NOT EXISTS bill_render (
     session TEXT, num INTEGER, version TEXT,
     fmt TEXT, nsegments INTEGER, nchars INTEGER,
@@ -219,6 +225,13 @@ class Store:
                 (session, num, version, r.statute, r.action, r.bill_section,
                  r.scope, r.verb, r.line_start, r.line_end, r.words_added,
                  r.words_deleted, int(r.in_title), int(r.in_body)))
+        self.db.execute("COMMIT")
+
+    def save_member(self, chamber, district, name, party, url) -> None:
+        self.db.execute("BEGIN IMMEDIATE")
+        self.db.execute(
+            "INSERT OR REPLACE INTO member (chamber,district,name,party,url)"
+            " VALUES (?,?,?,?,?)", (chamber, district, name, party, url))
         self.db.execute("COMMIT")
 
     def save_render(self, session, num, version, fmt, segments) -> None:
