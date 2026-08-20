@@ -51,6 +51,10 @@ added language a removal states the exact opposite of what the bill does.
 requirement, protection or limit is being repealed -- but only when those \
 words sit inside [[- -]]. A bill that deletes nothing of substance repeals \
 nothing. Do not reach for a repeal that is not there.
+- Many marked edits are punctuation, renumbering or cross-reference updates. \
+A deleted comma is not a repeal, and a semicolon replacing a comma changes \
+nothing at all -- least of all the clause that happens to follow it. Judge an \
+edit by the words it changes.
 - Never speculate about anyone's motives, party, or intent. Describe what the \
 text does and what it permits.
 
@@ -148,11 +152,48 @@ INTENT_LANGUAGE = re.compile(
     r"|\b(?:motivated by|agenda|pretext|smokescreen)\b",
     re.I)
 
-def messages(brief_text: str, pass_name: str) -> list[dict]:
+# Retrying is only useful if something about the request changes. This server
+# decodes greedily and ignores temperature, top_p and seed alike -- measured,
+# not assumed -- so re-asking the same question returns the same bytes, and a
+# retry ladder built on sampling never varied anything. What can change is the
+# input, so a retry says what was wrong with the last answer.
+#
+# This costs the cached prefix: the divergent suffix stops being three tokens
+# and the retry pays full prefill. Retries are rare enough that correctness is
+# worth more than the second or two.
+RETRY_NOTES = (
+    ("cut at the", "Your previous answer's one-line field ran past the hard "
+                   "character limit and was cut off mid-word. Write a much "
+                   "shorter one: six to eight words, ending in a full stop. "
+                   "Name the single effect and nothing else."),
+    ("claims a repeal", "Your previous answer said the bill repeals or removes "
+                        "something. Only text inside [[- -]] is being deleted. "
+                        "Check those markers: if the bill deletes nothing of "
+                        "substance, say what it creates or requires instead."),
+    ("reads a prohibition", "Your previous answer read a prohibition as though "
+                            "it granted permission. \"May not\" and \"shall "
+                            "not\" both forbid."),
+)
+_MALFORMED = ("Your previous answer was malformed or ran out of room. Return "
+              "complete, valid JSON, and keep every field short.")
+
+
+def retry_note(reason: str) -> str:
+    """What to tell the model about the answer that was rejected."""
+    for key, note in RETRY_NOTES:
+        if key in (reason or ""):
+            return note
+    return _MALFORMED
+
+
+def messages(brief_text: str, pass_name: str, note: str = "") -> list[dict]:
+    task = TASKS[pass_name]
+    if note:
+        task = f"{task}\n\n{note}"
     return [
         {"role": "system", "content": SYSTEM},
         # brief first so the cached prefix is shared across every pass
-        {"role": "user", "content": f"{brief_text}\n\n{TASKS[pass_name]}"},
+        {"role": "user", "content": f"{brief_text}\n\n{task}"},
     ]
 
 
@@ -185,11 +226,17 @@ NEGATED = re.compile(
 # the model happens to be -- so a headline at the cap was cut, not written.
 # SB 686 came back "...direct development approval for agricultural", missing
 # the noun. Re-rolling is cheap and usually lands shorter.
+# "...promote related elected co-." is 95 characters and ends in a full stop,
+# so a plain "does it end in punctuation" test called it finished. The word it
+# was cutting in half is the tell.
+_CUT_TAIL = re.compile(r"[-\u2010-\u2015]\s*[.!?]?$")
+
+
 def flags_cut_headline(one_line: str) -> str | None:
     line = (one_line or "").rstrip()
     if len(line) < ONE_LINE_MAX - 2:
         return None
-    if line.endswith((".", "!", "?")):
+    if line.endswith((".", "!", "?")) and not _CUT_TAIL.search(line):
         return None
     return f"headline cut at the {ONE_LINE_MAX}-character limit ({line[-24:]!r})"
 

@@ -179,3 +179,43 @@ def test_the_schema_no_longer_spells_out_a_bad_example():
     desc = SUMMARY["properties"]["one_line"]["description"]
     assert "Bad:" not in desc
     assert "Good:" in desc
+
+
+def test_a_headline_cut_mid_word_is_caught_even_ending_in_a_stop():
+    """CS/SB 572 came back "...promote related elected co-." -- 95 characters
+    and a full stop, but the word it cut in half is the tell."""
+    assert flags_cut_headline(
+        "Expands ethics rules to cover foster families and allows boards to "
+        "promote related elected co-.")
+
+
+def test_a_complete_headline_at_the_cap_survives():
+    assert not flags_cut_headline(
+        "Allows agricultural land to be developed for housing and industry "
+        "without a comprehensive plan.")
+
+
+# --- telling a retry what was wrong ----------------------------------------
+
+def test_a_retry_is_told_why_the_last_answer_was_rejected():
+    """The server decodes greedily and ignores temperature, so a retry only
+    differs if the input does."""
+    from flba.analysis.passes import messages, retry_note
+    cut = retry_note("headline cut at the 95-character limit ('x')")
+    assert "shorter" in cut
+    repeal = retry_note("claims a repeal ('removes the ban') but the bill "
+                        "deletes no such language")
+    assert "[[- -]]" in repeal
+    assert cut != repeal
+    # anything unrecognised still gets a usable instruction
+    assert retry_note("unparseable JSON")
+
+
+def test_the_note_reaches_the_model_and_only_on_a_retry():
+    from flba.analysis.passes import messages
+    first = messages("BRIEF", "summary")
+    again = messages("BRIEF", "summary", "Your previous answer was too long.")
+    assert first[1]["content"].endswith("TASK summary")
+    assert "too long" in again[1]["content"]
+    # the system prompt is untouched, so the cached prefix still matches
+    assert first[0] == again[0]

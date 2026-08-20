@@ -23,8 +23,10 @@ def tidy_statute(cite: str) -> str:
 
 KIND_NAMES = {0: "plain", 1: "insert", 2: "delete"}
 
-# (brief scale, temperature) per attempt.
-RETRIES = ((1.0, 0.0), (1.0, 0.7), (0.4, 0.7))
+# Brief scale per attempt. Temperature is not a lever here: the server decodes
+# greedily and ignores it, so what varies between attempts is the brief and the
+# note telling the model why the last answer was rejected.
+RETRIES = (1.0, 1.0, 0.4)
 
 
 def load_bill(db, session: str, num: int):
@@ -96,14 +98,14 @@ def analyze(db, session: str, num: int, backend: Backend,
         # recovers a pass that produced clean JSON saying the wrong thing --
         # at temperature 0 a retry on the same brief is byte-identical, so
         # without this the ladder silently re-asks and re-fails.
-        for attempt, (shrink, temp) in enumerate(RETRIES):
+        note = ""
+        for attempt, shrink in enumerate(RETRIES):
             text = (brief["text"] if shrink == 1.0 else
                     build_brief(bill, diff, refs,
                                 budget=int(budget * shrink))["text"])
-            reply = backend.chat(P.messages(text, name),
+            reply = backend.chat(P.messages(text, name, note),
                                  schema=P.SCHEMAS[name],
-                                 max_tokens=P.BUDGET[name],
-                                 temperature=temp)
+                                 max_tokens=P.BUDGET[name])
             why = is_degenerate(reply.text)
             if why is None:
                 try:
@@ -122,8 +124,8 @@ def analyze(db, session: str, num: int, backend: Backend,
                         data = parsed
                         break
             out.failures.append({"pass": name, "attempt": attempt + 1,
-                                 "reason": why, "brief_scale": shrink,
-                                 "temperature": temp})
+                                 "reason": why, "brief_scale": shrink})
+            note = P.retry_note(why)
             log(f"    {name}: attempt {attempt + 1} unusable ({why})")
 
         if data is None:
