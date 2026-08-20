@@ -418,3 +418,27 @@ def test_a_party_is_never_truncated_to_a_single_word_fragment():
     assert rec["party"] == "No Party Affiliation"
     assert rec["district"] == 37
     assert rec["name"] == "Jason W. B. Pizzo"
+
+
+def test_a_cited_subsection_links_to_the_statute_page_that_exists():
+    """The model cites "1002.33(10)(e)"; pages are keyed on "1002.33"."""
+    from flba.site import statute_page
+    available = {"1002.33", "1003.42"}
+    assert statute_page("1002.33(10)(e)", available) == "1002.33"
+    assert statute_page("s. 1003.42(2)(w)", available) == "1003.42"
+    assert statute_page("1002.33", available) == "1002.33"
+    # nothing to link to rather than a link to nothing
+    assert statute_page("999.99(1)", available) == ""
+    assert statute_page("", available) == ""
+
+
+def test_a_cite_with_no_page_renders_without_a_link(built):
+    from bs4 import BeautifulSoup
+    out, _ = built
+    for page in (out / "bills").glob("*.html"):
+        if page.stem.endswith(SUBPAGES):
+            continue
+        soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
+        for a in soup.select("a.pill[href*='statutes/']"):
+            target = out / "statutes" / a["href"].split("statutes/")[1]
+            assert target.exists(), f"{page.name} -> {a['href']}"

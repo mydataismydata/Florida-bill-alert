@@ -50,6 +50,22 @@ def _rows(db, sql, *args):
 _COMMITTEE_WORD = re.compile(r"\b(?:Committee|Subcommittee)\b")
 
 
+# "1002.33(10)(e)" is a real citation and worth showing, but the page is
+# 1002.33 -- keeping the subsection in the href produced a 404 on every
+# provision the model cited that way.
+_SUBSECTION = re.compile(r"\s*\(.*$")
+# analyze.tidy_statute strips this at storage time; repeated here so the
+# resolver is correct on its own and on anything stored before it did.
+_CITE_PREFIX = re.compile(r"^(?:ss?\.|section)\s*", re.I)
+
+
+def statute_page(cite: str, available: set) -> str:
+    """The statute page a citation should link to, or '' if there is none."""
+    base = _CITE_PREFIX.sub("", (cite or "").strip())
+    base = _SUBSECTION.sub("", base).rstrip(".")
+    return base if base in available else ""
+
+
 def split_sponsor(sponsor: str, committees: set) -> tuple[list, list]:
     """Separate the committees that produced substitutes from the members who
     filed the bill.
@@ -141,6 +157,14 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     if not bills:
         raise SystemExit(f"no bills ingested for session {session}")
 
+    # Which statutes will actually get a page. The model cites subsections --
+    # "1002.33(10)(e)" -- and pages are keyed on the bare number, so a claim's
+    # link has to be resolved against this rather than trusted.
+    statute_pages = {r["statute"] for r in
+                     _rows(db, "SELECT DISTINCT statute, num FROM statute_ref"
+                               " WHERE session=?", session)
+                     if r["num"] in built_nums and SAFE_CITE.match(r["statute"])}
+
     committees = {r["name"] for r in
                   _rows(db, "SELECT DISTINCT name FROM committee_ref")}
     # Keyed by the member page URL, which is what a bill row already carries.
@@ -181,6 +205,8 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
             if ai:
                 for claim in (ai.get("provisions") or []) + (ai.get("implications") or []):
                     claim["line"] = locate(d, claim.get("quote", ""))
+                    claim["statute_href"] = statute_page(
+                        claim.get("statute", ""), statute_pages)
             all_blocks = context_blocks(d)
             blocks = all_blocks[:MAX_BLOCKS]
             stats = {
