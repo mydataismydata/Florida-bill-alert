@@ -30,6 +30,16 @@ if [[ ! -f "$SRC/index.html" ]]; then
   exit 2
 fi
 
+# A --local build carries buttons that run the model. They post to a server on
+# the analysis box and would be dead links in public at best. The gap between
+# the two machines is the point, so this refuses rather than warns.
+if [[ -f "$SRC/.local-build" ]]; then
+  echo "refusing to deploy: $SRC was built with --local." >&2
+  echo "that tree carries operator controls which run the analyzer." >&2
+  echo "rebuild without it:  flba --session 2026 build" >&2
+  exit 3
+fi
+
 DRY="--dry-run"
 [[ "${1:-}" == "--go" ]] && DRY=""
 

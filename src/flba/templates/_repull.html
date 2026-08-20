@@ -1,0 +1,17 @@
+{#
+  Operator control. Rendered only when the site was built with --local, because
+  the thing it posts to is scripts/serve_local.py on the analysis box. The
+  public host has no model, no pipeline and no database, so this must never
+  reach it -- see the guard in scripts/deploy.sh.
+
+  A plain form, so it still works with JavaScript switched off: the server
+  redirects back to the bill when it is done. The script below upgrades it to
+  stay on the page and report progress.
+#}
+{% macro repull(num) %}
+<form class="repull noprint" method="post" action="/_reanalyze/{{ num }}">
+  <button type="submit">Re-run the analysis</button>
+  <span class="repull-note">Runs the model on this machine — about a minute.
+    The page reloads when it finishes.</span>
+</form>
+{% endmacro %}

@@ -16,6 +16,9 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from .analysis import passes as P
+from .analysis.analyze import RETRIES
+from .analysis.brief import build as build_brief
 from .diff import PLAIN, BillDiff, Segment, context_blocks, locate
 from .diff import lines as doc_lines
 from .stages import kind_of, pathway, track
@@ -68,7 +71,14 @@ def _load_render(db, session, num):
 
 
 def build(db_path: Path, out: Path, session: str, built: str | None = None,
-          limit: int = 0, log=print) -> dict:
+          limit: int = 0, local: bool = False, only: int | None = None,
+          log=print) -> dict:
+    """Render the static site.
+
+    `local` adds operator controls that only work behind scripts/serve_local.py
+    and must never reach the public host, which holds no model, no pipeline and
+    no database. It defaults off so a plain build is always safe to deploy.
+    """
     db = sqlite3.connect(str(db_path))
     db.row_factory = sqlite3.Row
     env = _env()
@@ -77,12 +87,32 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     (out / "statutes").mkdir(parents=True, exist_ok=True)
     built = built or date.today().isoformat()
 
+    # Written before anything can return early, because --only exits long
+    # before the tail of this function. deploy.sh refuses to push a tree
+    # carrying this file: the operator controls only work against a server on
+    # this machine, and the public host must stay a file host.
+    marker = out / ".local-build"
+    if local:
+        marker.write_text(
+            "Built with --local: this tree carries operator controls that post\n"
+            "to scripts/serve_local.py. Do not deploy it. Rebuild without\n"
+            "--local to publish.\n", encoding="utf-8")
+    elif marker.exists():
+        marker.unlink()
+
     bills = _rows(db, "SELECT * FROM bill WHERE session=? ORDER BY num", session)
     if limit:
         bills = bills[:limit]
     # A partial build must not emit links to pages it never wrote, so every
     # cross-reference below is scoped to the bills actually rendered.
     built_nums = {b["num"] for b in bills}
+    if only is not None:
+        # Refresh one bill over a site that is already complete. The rest of
+        # the tree stays on disk, so cross-references may still point at it --
+        # what must not happen is scoping links to the single bill rebuilt.
+        bills = [b for b in bills if b["num"] == only]
+        if not bills:
+            raise SystemExit(f"bill {only} is not in session {session}")
     if not bills:
         raise SystemExit(f"no bills ingested for session {session}")
 
@@ -92,7 +122,7 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         history.setdefault(r["num"], []).append(dict(r))
 
     common = dict(site_name=SITE_NAME, session=session, built=built,
-                  repo=REPO, bill_count=len(bills))
+                  repo=REPO, bill_count=len(bills), local=local)
 
     # ---------------------------------------------------------- bill pages
     index_rows, outcomes, enacted = [], {}, []
@@ -135,6 +165,25 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                     lines=doc_lines(d), chars=nchars,
                     heavy=nchars > 250_000, **common), encoding="utf-8")
 
+            # Exactly what the model is asked, reproduced from the same code
+            # that asks it. Building this needs no model and no network -- the
+            # brief is assembled from the bill text -- so it is safe to publish
+            # and stays true whenever the prompt changes.
+            # brief.build reads these with .get, and sqlite3.Row has none
+            brief = build_brief(dict(b), d, [dict(r) for r in refs])
+            (out / "bills" / f"{b['num']}-prompt.html").write_text(
+                env.get_template("prompt.html").render(
+                    root="../", b=b, ai=ai, system=P.SYSTEM,
+                    brief=brief["text"], brief_chars=len(brief["text"]),
+                    passages=brief["passages"],
+                    total_passages=brief["total_passages"],
+                    truncated=brief["truncated"],
+                    retries=RETRIES,
+                    passes=[{"name": n, "max_tokens": P.BUDGET[n],
+                             "schema": json.dumps(P.SCHEMAS[n], indent=2)}
+                            for n in P.ORDER],
+                    **common), encoding="utf-8")
+
         html = env.get_template("bill.html").render(
             root="../", b=b, p=prog, path=pathway(prog), refs=refs,
             blocks=blocks, total_blocks=len(all_blocks),
@@ -158,6 +207,14 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
             enacted.append(b)
         if i % 400 == 0:
             log(f"  {i}/{len(bills)} bill pages")
+
+    if only is not None:
+        # Everything below rebuilds the whole tree: the index, its tiles and
+        # counts, and 4,000 statute pages. That is a full build's work, and
+        # this path exists to be quick. The front page keeps its previous
+        # counts until the next full build.
+        return {"bills": len(bills), "statutes": 0, "files": 0, "bytes": 0,
+                "outcomes": outcomes, "partial": True}
 
     (out / "search-index.json").write_text(
         json.dumps(index_rows, separators=(",", ":")), encoding="utf-8")
@@ -228,6 +285,7 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         encoding="utf-8")
 
     shutil.copy(HERE / "static" / "style.css", out / "style.css")
+
 
     files = sum(1 for _ in out.rglob("*") if _.is_file())
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())

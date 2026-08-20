@@ -281,3 +281,23 @@ tr.expander button { font: inherit; font-size: .84rem; cursor: pointer;
   border-radius: var(--radius); padding: .3rem .7rem; width: 100%; }
 tr.expander button:hover { border-color: var(--accent); }
 @media print { tr.expander { display: none !important; } }
+
+/* the exact prompt, reproduced */
+pre.prompt { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 4px; padding: .8rem 1rem; overflow-x: auto;
+  white-space: pre-wrap; word-break: break-word;
+  font-size: .82rem; line-height: 1.5; max-height: 34rem; overflow-y: auto; }
+pre.prompt.json { white-space: pre; word-break: normal; max-height: 22rem; }
+pre.prompt .task { background: var(--accent); color: var(--accent-ink);
+  padding: 0 .3rem; border-radius: 3px; }
+
+/* operator control -- local builds only, never deployed */
+form.repull { display: flex; align-items: center; gap: .7rem; flex-wrap: wrap;
+  margin: 1rem 0 0; padding-top: .8rem; border-top: 1px dashed var(--line); }
+form.repull button { font: inherit; font-size: .85rem; cursor: pointer;
+  padding: .35rem .8rem; border-radius: 4px; border: 1px solid var(--accent);
+  background: var(--accent); color: var(--accent-ink); }
+form.repull button:disabled { opacity: .55; cursor: progress; }
+.repull-note { font-size: .8rem; color: var(--muted); }
+form.repull.working .repull-note { color: var(--accent); }
+form.repull.failed .repull-note { color: var(--vetoed); }

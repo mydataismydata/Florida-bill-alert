@@ -171,3 +171,44 @@ the gap structural rather than merely configured.
 `--delete` keeps the public tree an exact mirror so withdrawn content does not
 linger, and `--checksum` is used because a rebuild rewrites every file's
 timestamp even when the bytes are unchanged.
+
+## Running the site locally, with the operator controls
+
+A plain build is what gets deployed: static files, no controls, nothing that
+runs a model. To work on analyses you want the local build instead, which adds
+a **Re-run the analysis** button to each bill page.
+
+```bash
+flba --session 2026 build --local
+python scripts/serve_local.py
+```
+
+Then open <http://127.0.0.1:8791>. The button posts to the small server in
+`scripts/serve_local.py`, which runs the analyzer for that one bill and
+rebuilds its pages -- about a minute, and the page reloads itself when it is
+done. With JavaScript off the same button still works; it just redirects
+instead of reporting progress.
+
+The server binds to the loopback interface only. It runs a subprocess on
+request, so it must not be reachable from anywhere else.
+
+Two things keep this off the public host:
+
+- `build --local` writes a `.local-build` marker into the site tree.
+- `scripts/deploy.sh` refuses to push a tree carrying that marker, and exits 3.
+
+Rebuild without `--local` to publish. The public server holds no model, no
+pipeline and no database -- only files -- and that is what makes the gap
+structural rather than merely configured.
+
+### Seeing the prompt
+
+Every bill page links to **See the exact prompt**, which reproduces the whole
+of what the model is given: the system message, the brief built from the bill
+text, the three task selectors, and the JSON schema each pass must satisfy.
+It is generated from the same code that builds the request, and a test asserts
+the two match byte for byte, so it cannot drift into being a plausible
+description of the prompt rather than the prompt.
+
+These pages need no model and no network to build, so they ship with the
+public site.

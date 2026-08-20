@@ -24,14 +24,63 @@ def built(tmp_path_factory):
     return out, stats
 
 
+SUBPAGES = ("-text", "-prompt")
+
+
 def test_it_writes_a_summary_and_a_full_text_page_per_bill(built):
     out, stats = built
     assert stats["bills"] == 40
     summaries = [p for p in (out / "bills").glob("*.html")
-                 if not p.stem.endswith("-text")]
+                 if not p.stem.endswith(SUBPAGES)]
     assert len(summaries) == 40
     # a full-text page exists wherever the bill's text was cached
     assert list((out / "bills").glob("*-text.html"))
+
+
+def test_a_prompt_page_accompanies_every_bill_that_has_text(built):
+    """What the model is asked is published beside what it answered."""
+    out, _ = built
+    texts = {p.stem[: -len("-text")] for p in (out / "bills").glob("*-text.html")}
+    prompts = {p.stem[: -len("-prompt")] for p in (out / "bills").glob("*-prompt.html")}
+    assert texts and texts == prompts
+
+
+def test_the_prompt_page_shows_the_prompt_actually_sent(built):
+    out, _ = built
+    page = next((out / "bills").glob("*-prompt.html")).read_text(encoding="utf-8")
+    from flba.analysis import passes as P
+    # the system message is reproduced, not paraphrased
+    for line in P.SYSTEM.splitlines():
+        if len(line) > 40:
+            assert escape(line) in page, line[:60]
+    for name in P.ORDER:
+        assert f"TASK {name}" in page
+
+
+def escape(text):
+    from markupsafe import escape as e
+    return str(e(text))
+
+
+def test_a_plain_build_carries_no_operator_controls(built):
+    """The public host has no model and no pipeline, so a default build must
+    not ship a button that runs one."""
+    out, _ = built
+    assert not (out / ".local-build").exists()
+    for page in out.rglob("*.html"):
+        text = page.read_text(encoding="utf-8")
+        assert "_reanalyze" not in text, page
+        assert 'class="repull' not in text, page
+
+
+def test_a_local_build_carries_them_and_is_marked(tmp_path_factory):
+    from flba.site import build
+    out = tmp_path_factory.mktemp("localsite")
+    build(DB, out, "2026", built="2026-01-01", limit=40, local=True)
+    assert (out / ".local-build").exists()
+    pages = [p for p in (out / "bills").glob("*.html")
+             if not p.stem.endswith(SUBPAGES)]
+    assert any("_reanalyze" in p.read_text(encoding="utf-8") for p in pages)
 
 
 def test_no_template_syntax_escapes_into_the_output(built):
@@ -152,3 +201,63 @@ def test_statute_citations_cannot_escape_the_output_directory(built):
     out, _ = built
     for page in (out / "statutes").glob("*.html"):
         assert ".." not in page.name
+
+
+def test_only_rebuilds_one_bill_over_an_existing_site(built):
+    """The button's rebuild path. It must refresh the bill and leave the rest
+    of the tree standing -- including links out to bills it did not render."""
+    from bs4 import BeautifulSoup
+    from flba.site import build
+    out, _ = built
+    other = sorted(p.name for p in (out / "bills").glob("*.html")
+                   if not p.stem.endswith(SUBPAGES))
+    num = int(Path(other[-1]).stem)
+
+    stats = build(DB, out, "2026", built="2026-01-01", limit=40, only=num)
+    assert stats["partial"] and stats["bills"] == 1
+    # every sibling page survived
+    assert sorted(p.name for p in (out / "bills").glob("*.html")
+                  if not p.stem.endswith(SUBPAGES)) == other
+
+    # and the rebuilt page still links only to pages that exist
+    soup = BeautifulSoup((out / "bills" / f"{num}.html").read_text(), "html.parser")
+    for a in soup.find_all("a", href=True):
+        href = a["href"].split("#")[0]
+        if href.startswith(("http", "mailto:")) or not href:
+            continue
+        assert (out / "bills" / href).resolve().exists(), href
+
+
+def test_only_rejects_a_bill_that_is_not_there(built):
+    from flba.site import build
+    out, _ = built
+    with pytest.raises(SystemExit):
+        build(DB, out, "2026", built="2026-01-01", only=999999)
+
+
+def test_the_published_prompt_is_the_prompt_that_gets_sent(built):
+    """The page is only worth publishing if it cannot drift from the request.
+    Both are built from passes.SYSTEM and brief.build, so compare the rendered
+    page against a freshly assembled message."""
+    import html as _html
+    import re as _re
+    import sqlite3
+    from flba.analysis import passes as P
+    from flba.analysis.analyze import load_bill
+    from flba.analysis.brief import build as build_brief
+
+    out, _ = built
+    page_path = sorted((out / "bills").glob("*-prompt.html"))[0]
+    num = int(page_path.stem[: -len("-prompt")])
+
+    db = sqlite3.connect(str(DB))
+    db.row_factory = sqlite3.Row
+    bill, _version, diff, refs = load_bill(db, "2026", num)
+    sent = P.messages(build_brief(bill, diff, refs)["text"], "summary")
+
+    blocks = _re.findall(r'<pre class="prompt">(.*?)</pre>',
+                         page_path.read_text(encoding="utf-8"), _re.S)
+    assert len(blocks) == 2, "expected a system block and a user block"
+    assert _html.unescape(blocks[0]) == sent[0]["content"]
+    shown = _html.unescape(_re.sub(r"<[^>]+>", "", blocks[1]))
+    assert shown.rsplit("\n\nTASK", 1)[0] == sent[1]["content"].rsplit("\n\nTASK", 1)[0]

@@ -536,10 +536,17 @@ def cmd_build(args) -> int:
 
     out = Path(args.out) if args.out else ROOT / "site"
     print(f"building session {args.session} -> {out}")
-    stats = build(DATA / "index.sqlite", out, args.session, limit=args.limit)
+    stats = build(DATA / "index.sqlite", out, args.session, limit=args.limit,
+                  local=args.local, only=args.only)
+    if stats.get("partial"):
+        print(f"\n  rebuilt bill {args.only} only "
+              f"(front page counts unchanged until a full build)")
+        return 0
     print(f"\n  {stats['bills']} bill pages")
     print(f"  {stats['statutes']} statute pages")
     print(f"  {stats['files']} files, {stats['bytes']/1e6:.1f} MB total")
+    if args.local:
+        print("\n  --local: operator controls included. NOT for deployment.")
     print(f"\n  open: {out / 'index.html'}")
     return 0
 
@@ -721,6 +728,12 @@ def main(argv=None) -> int:
         if name == "build":
             sp.add_argument("--out", help="output directory (default ./site)")
             sp.add_argument("--limit", type=int, default=0)
+            sp.add_argument("--only", type=int,
+                            help="rebuild just this bill's pages, over an "
+                                 "existing site")
+            sp.add_argument("--local", action="store_true",
+                            help="include operator controls that post to "
+                                 "scripts/serve_local.py -- never deploy this")
         if name in ("bills", "docs"):
             sp.add_argument("--limit", type=int, default=0,
                             help="stop after N items -- use this to run the "

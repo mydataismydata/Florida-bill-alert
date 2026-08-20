@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ b.label }} prompt · {{ site_name }}{% endblock %}
+{% block description %}The exact prompt sent to the language model for {{ b.label }}.{% endblock %}
+{% block body %}
+<h1>{{ b.label }} — the prompt</h1>
+<p class="sub">{{ b.title }}</p>
+<p class="meta">
+   <a href="{{ root }}bills/{{ b.num }}.html">back to the summary</a> ·
+   <a href="{{ root }}bills/{{ b.num }}-text.html">marked-up text</a> ·
+   <a href="{{ b.url }}">official record</a></p>
+
+<p>This is the whole of what the model is given for this bill — nothing is
+   withheld and nothing is added at run time. It is reproduced here so that any
+   claim on the summary page can be traced back to the words that prompted it.
+   Everything below is built from the bill text by the deterministic layer.</p>
+
+{% if ai %}
+<div class="panel">
+  <p class="meta">Answered by <strong>{{ ai.model }}</strong> on {{ ai.generated_at }}.
+  The first attempt runs at temperature {{ '%g'|format(retries[0][1]) }}; a pass
+  that comes back unusable is retried{% if retries|length > 2 %} up to
+  {{ retries|length - 1 }} times{% endif %}, warmer and on a shorter brief.
+  {% if ai.stats and ai.stats.brief_chars and ai.stats.brief_chars != brief_chars %}
+  <br><strong>Note:</strong> the stored analysis was produced from a
+  {{ '{:,}'.format(ai.stats.brief_chars) }}-character brief, not the
+  {{ '{:,}'.format(brief_chars) }} characters shown here — a pass that fails is
+  retried on a shorter one.
+  {% endif %}
+  </p>
+</div>
+{% else %}
+<p class="meta">This bill has not been analysed yet. The prompt below is what
+   would be sent.</p>
+{% endif %}
+
+<h2>1 · System message</h2>
+<p class="meta">Identical for every bill and every pass. That is deliberate: the
+   server reuses a cached prefix only when the part that differs between
+   requests is very short, so all instruction lives here and the pass is named
+   in three tokens at the very end of the user message.</p>
+<pre class="prompt">{{ system }}</pre>
+
+<h2>2 · User message</h2>
+<p class="meta">{{ '{:,}'.format(brief_chars) }} characters, built from
+   {{ passages }} of {{ total_passages }} changed passages{% if truncated %} —
+   the rest did not fit the budget{% endif %}. The last line names the pass and
+   is the only part that changes between the three requests.</p>
+<pre class="prompt">{{ brief }}
+
+<span class="task">TASK {{ '{ summary | provisions | implications }' }}</span></pre>
+
+<h2>3 · What each pass is allowed to return</h2>
+<p class="meta">The schema is compiled into a grammar and enforced at the
+   decoder, so the model cannot emit JSON that breaks it. Only shape is
+   enforced this way — lengths, types and structure. Prose in a schema
+   description never reaches the model at all.</p>
+{% for p in passes %}
+<h3>TASK {{ p.name }}</h3>
+<p class="meta">Reply capped at {{ p.max_tokens }} tokens.</p>
+<pre class="prompt json">{{ p.schema }}</pre>
+{% endfor %}
+{% endblock %}
