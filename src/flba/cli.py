@@ -731,6 +731,21 @@ def cmd_analyze(args) -> int:
         rows = db.execute(ORDER_SQL[args.order] if args.order in ORDER_SQL
                           else ORDER_SQL["number"], (args.session,)).fetchall()
         nums = [r["num"] for r in rows if r["num"] not in done]
+        if args.vetoed:
+            # Not a column: a veto is read out of the history, like every
+            # other outcome.
+            from .stages import kind_of, track
+            hist = {}
+            for h in db.execute("SELECT num,date,chamber,action FROM history"
+                                " WHERE session=? ORDER BY num,seq", (args.session,)):
+                hist.setdefault(h["num"], []).append(dict(h))
+            keep = set()
+            for b in db.execute("SELECT * FROM bill WHERE session=?", (args.session,)):
+                p = track(hist.get(b["num"], []), b["chapter_law"],
+                          kind_of(b["label"]))
+                if p.outcome == "vetoed":
+                    keep.add(b["num"])
+            nums = [n for n in nums if n in keep]
         if args.enacted:
             # What became law is what actually binds anyone, so it is worth
             # analysing first even though it is 12% of the session.
@@ -852,6 +867,8 @@ def main(argv=None) -> int:
                             choices=["number", "live", "activity"])
             sp.add_argument("--enacted", action="store_true",
                             help="only bills that became law")
+            sp.add_argument("--vetoed", action="store_true",
+                            help="only bills the Governor vetoed")
             sp.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
             sp.add_argument("--model",
                             default="mlx-community/Qwen3.8-27B-4bit")

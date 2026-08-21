@@ -10,6 +10,8 @@ from ..diff import BillDiff, Segment
 from . import passes as P
 from .backend import Backend
 from .brief import build as build_brief
+from .brief import chunks as brief_chunks
+from .brief import header as brief_header
 from .brief import readings
 from .verify import Verifier, is_degenerate, verify_claims
 
@@ -85,6 +87,123 @@ class Analysis:
         return {k: v for k, v in self.__dict__.items()}
 
 
+def digest(bill: dict, refs: list, provisions: list) -> str:
+    """The brief for the reduce step.
+
+    Every chunk was read on its own, so nothing has seen the whole bill. What
+    has covered it is the set of provisions the chunks produced, each carrying
+    a quote already checked against the text. Summarising from those keeps the
+    summary grounded in verified language rather than in other summaries.
+    """
+    lines = brief_header(bill, refs)
+    lines.append(f"\nWHAT THIS BILL DOES — {len(provisions)} provisions, drawn "
+                 f"from every part of it and each already checked word for "
+                 f"word against the bill:")
+    for i, p in enumerate(provisions, 1):
+        sig = p.get("significance", "")
+        cite = f" (s. {p['statute']})" if p.get("statute") else ""
+        lines.append(f"\n{i}. [{sig}] {p.get('heading','')}{cite}")
+        lines.append(f"   {p.get('effect','')}")
+        if p.get("quote"):
+            lines.append(f'   "{p["quote"]}"')
+    lines.append("\nThese cover the whole act. Summarise the act itself, not "
+                 "any one provision.")
+    return "\n".join(lines)
+
+
+def _dedupe(claims: list, field: str = "quote") -> list:
+    """Two chunks can land on the same passage; a reader should see it once."""
+    seen, out = set(), []
+    for c in claims:
+        key = re.sub(r"[^a-z0-9]+", "", (c.get(field) or "").lower())[:120]
+        if key and key in seen:
+            continue
+        seen.add(key)
+        out.append(c)
+    return out
+
+
+def analyze_in_parts(db, bill, version, diff, refs, backend, budget, log,
+                     out) -> Analysis:
+    """Read a bill too long for one request, a part at a time.
+
+    Provisions and implications map: each part yields claims with quotes, and
+    quotes verify against the whole bill however they were found. The summary
+    reduces, over those verified provisions.
+    """
+    parts = brief_chunks(bill, diff, refs, budget=budget)
+    verifier = Verifier(readings(diff))
+    deleted_text = " ".join(s.text for s in diff.deletions)
+    log(f"    reading in {len(parts)} parts "
+        f"({parts[0]['total_passages']} passages)")
+
+    prov: list = []
+    impl: list = []
+    for part in parts:
+        for name in ("provisions", "implications"):
+            reply = backend.chat(P.messages(part["text"], name),
+                                 schema=P.SCHEMAS[name],
+                                 max_tokens=P.BUDGET[name])
+            if is_degenerate(reply.text):
+                out.failures.append({"pass": name, "part": part["part"],
+                                     "reason": is_degenerate(reply.text)})
+                continue
+            try:
+                data = reply.json()
+            except json.JSONDecodeError:
+                out.failures.append({"pass": name, "part": part["part"],
+                                     "reason": "unparseable JSON"})
+                continue
+            kept, dropped = verify_claims(data.get(name, []), verifier)
+            out.dropped += [dict(d, pass_name=name, part=part["part"])
+                            for d in dropped]
+            if name == "provisions":
+                for c in kept:
+                    c["statute"] = tidy_statute(c.get("statute", ""))
+                prov += kept
+            else:
+                for c in kept:
+                    hit = (P.flags_intent(c.get("consequence", ""))
+                           or P.flags_inverted_prohibition(
+                               c.get("consequence", ""), c.get("quote", "")))
+                    if hit:
+                        out.flagged.append(dict(c, flagged_for=hit))
+                    else:
+                        impl.append(c)
+        log(f"      part {part['part']}/{len(parts)}: "
+            f"{len(prov)} provisions, {len(impl)} implications so far")
+
+    # Order by weight, then cut to what the schema would have allowed from a
+    # single request, so a long bill does not simply publish more.
+    rank = {"major": 0, "moderate": 1, "technical": 2}
+    prov = sorted(_dedupe(prov), key=lambda c: rank.get(c.get("significance"), 3))
+    out.provisions = prov[:P.PROVISION_CAP]
+    out.implications = _dedupe(impl)[:P.IMPLICATION_CAP]
+
+    # Reduce: the summary, from provisions that between them cover the bill.
+    for attempt, note in enumerate(("", None)):
+        text = digest(bill, refs, out.provisions)
+        reply = backend.chat(P.messages(text, "summary", note or ""),
+                             schema=P.SCHEMAS["summary"],
+                             max_tokens=P.BUDGET["summary"])
+        why = is_degenerate(reply.text)
+        if why is None:
+            try:
+                data = reply.json()
+            except json.JSONDecodeError:
+                why = "unparseable JSON"
+            else:
+                why = (P.flags_false_repeal(summary_prose(data), deleted_text)
+                       or P.flags_cut_headline(data.get("one_line", "")))
+                if why is None:
+                    out.summary = data
+                    break
+        out.failures.append({"pass": "summary", "attempt": attempt + 1,
+                             "reason": why, "reduced": True})
+        note = P.retry_note(why)
+    return out
+
+
 def analyze(db, session: str, num: int, backend: Backend,
             budget: int = 24_000, log=lambda *_: None) -> Analysis | None:
     loaded = load_bill(db, session, num)
@@ -93,6 +212,29 @@ def analyze(db, session: str, num: int, backend: Backend,
     bill, version, diff, refs = loaded
 
     brief = build_brief(bill, diff, refs, budget=budget)
+    out0 = Analysis(session=session, num=num, label=bill.get("label", ""),
+                    version=version, model=backend.model)
+    if brief["truncated"]:
+        # A single request would show the model a fraction of the bill and ask
+        # it to describe the whole thing.
+        t0 = time.time()
+        res = analyze_in_parts(db, bill, version, diff, refs, backend, budget,
+                               log, out0)
+        total = len(res.provisions) + len(res.implications) + len(res.dropped)
+        res.stats = {
+            "seconds": round(time.time() - t0, 1),
+            "brief_chars": len(brief["text"]),
+            "passages_shown": brief["total_passages"],
+            "passages_total": brief["total_passages"],
+            "truncated": False, "read_in_parts": True,
+            "claims_kept": len(res.provisions) + len(res.implications),
+            "claims_dropped": len(res.dropped),
+            "claims_flagged": len(res.flagged),
+            "pass_failures": len(res.failures),
+            "verify_rate": round(1 - len(res.dropped) / total, 3) if total else None,
+        }
+        return res
+
     verifier = Verifier(readings(diff))
     # What the bill actually strikes, for checking claims of repeal against.
     deleted_text = " ".join(s.text for s in diff.deletions)

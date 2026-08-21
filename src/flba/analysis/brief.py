@@ -64,9 +64,10 @@ def render_passage(parts) -> str:
     return " ".join(out)
 
 
-def build(bill: dict, diff: BillDiff, refs: list[dict],
-          budget: int = DEFAULT_BUDGET) -> dict:
-    """Return {'text': brief, 'truncated': bool, 'passages': n_shown}."""
+def header(bill: dict, refs: list[dict]) -> list[str]:
+    """Everything above the changed language: who filed it, what it operates
+    on. Identical in every chunk of a split brief, which is what lets the
+    model read part four without having lost the bill's identity."""
     lines = [
         f"BILL: {bill.get('label','')} — {bill.get('title','')}",
     ]
@@ -92,6 +93,13 @@ def build(bill: dict, diff: BillDiff, refs: list[dict],
                          f"{r['action']}s s. {r['statute']} at {where}{churn}{scope}")
         if len(refs) > 60:
             lines.append(f"  ... and {len(refs) - 60} more")
+    return lines
+
+
+def build(bill: dict, diff: BillDiff, refs: list[dict],
+          budget: int = DEFAULT_BUDGET) -> dict:
+    """Return {'text': brief, 'truncated': bool, 'passages': n_shown}."""
+    lines = header(bill, refs)
 
     blocks = context_blocks(diff)
     # Substance concentrates in the biggest edits, so when the budget binds,
@@ -153,3 +161,58 @@ def readings(diff: BillDiff) -> list[str]:
         " ".join(s.text for s in diff.segments if s.kind != INSERT),   # as it stands
         source_text(diff),                                             # as printed
     ]
+
+
+def chunks(bill: dict, diff: BillDiff, refs: list[dict],
+           budget: int = DEFAULT_BUDGET) -> list[dict]:
+    """Split a bill into as many briefs as it takes to show all of it.
+
+    `build` keeps the biggest passages and drops the tail, which is right when
+    the tail is small and wrong when it is most of the bill: CS/CS/HB 797 has
+    57 changed passages and was summarised from one of them. This partitions
+    the passages in document order instead, so every one is read -- just not
+    all in the same request.
+
+    Each chunk carries the same header, so part four still knows which bill it
+    belongs to, and says which part it is, so the model does not describe a
+    fragment as though it were the whole act.
+    """
+    blocks = context_blocks(diff)
+    bodies = [(blk, render_passage(blk.parts)) for blk in blocks]
+
+    groups: list[list] = []
+    current: list = []
+    used = 0
+    for blk, body in bodies:
+        # A single passage over budget still goes in alone: splitting inside a
+        # passage would cut a sentence in half, and half a sentence cannot be
+        # quoted.
+        if current and used + len(body) > budget:
+            groups.append(current)
+            current, used = [], 0
+        current.append((blk, body))
+        used += len(body)
+    if current:
+        groups.append(current)
+    if not groups:
+        return [build(bill, diff, refs, budget)]
+
+    out = []
+    for i, group in enumerate(groups, 1):
+        lines = header(bill, refs)
+        lines.append(
+            f"\nCHANGED LANGUAGE — PART {i} OF {len(groups)} "
+            f"({len(group)} passages of {len(blocks)} in the bill). "
+            f"{ADD_OPEN}text{ADD_CLOSE} is being ADDED to law; "
+            f"{DEL_OPEN}text{DEL_CLOSE} is being DELETED from law. "
+            f"Unmarked text is existing law, shown for context, and is not "
+            f"changing. This is one part of a longer bill: describe only what "
+            f"is in front of you and do not characterise the act as a whole. "
+            f"Line numbers are the Legislature's own.")
+        for blk, body in group:
+            at = f"line {blk.line}" if blk.line else "—"
+            lines.append(f"\n[{at}] {body}")
+        out.append({"text": "\n".join(lines), "truncated": False,
+                    "passages": len(group), "total_passages": len(blocks),
+                    "part": i, "parts": len(groups)})
+    return out

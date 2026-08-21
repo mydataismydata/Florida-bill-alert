@@ -121,6 +121,12 @@ SCHEMAS = {"summary": SUMMARY, "provisions": PROVISIONS,
 # which surfaces as unparseable JSON rather than as a truncation.
 BUDGET = {"summary": 900, "provisions": 2000, "implications": 2000}
 
+# What a single request could have returned. A bill read in parts must
+# not publish more just for being long -- the reader's attention did not
+# grow with the page count.
+PROVISION_CAP = 8
+IMPLICATION_CAP = 6
+
 # A deterministic backstop under the prompt. Speculation about motive is the
 # one failure this project cannot afford, so it is checked for rather than
 # merely discouraged.

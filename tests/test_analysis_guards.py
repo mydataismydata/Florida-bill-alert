@@ -380,3 +380,63 @@ def test_wanting_something_is_not_a_political_motive():
     # naming an actor still counts
     assert flags_intent("The sponsor wants to expand the exemption.")
     assert flags_intent("Senator Gaetz pushed for this change.")
+
+
+# --- reading a bill too long for one request --------------------------------
+
+def _long_bill(n_changes=30, fillers=40):
+    """Enough separated changes that they form distinct passages, and enough
+    text that one brief cannot hold them all."""
+    from flba.diff import BillDiff, Segment
+    segs = []
+    for i in range(n_changes):
+        for _ in range(fillers):
+            segs.append(Segment("plain", "word " * 8, i, None))
+        segs.append(Segment("insert", f"new language for section {i}", i, None))
+    return BillDiff("html", segs)
+
+
+def test_every_passage_reaches_the_model_when_split():
+    """CS/CS/HB 797 has 57 changed passages and a single brief showed one of
+    them. Splitting must cover all 57, not a bigger fraction of them."""
+    from flba.analysis.brief import build, chunks
+    diff = _long_bill()
+    bill, refs = {"label": "HB 1", "title": "Test"}, []
+
+    one = build(bill, diff, refs, budget=4000)
+    assert one["truncated"], "fixture must be big enough to truncate"
+
+    parts = chunks(bill, diff, refs, budget=4000)
+    assert len(parts) > 1
+    assert sum(p["passages"] for p in parts) == one["total_passages"]
+    for p in parts:
+        assert p["part"] and p["parts"] == len(parts)
+        assert "PART" in p["text"]
+
+
+def test_each_part_still_names_the_bill():
+    """Part four is useless if the model has lost track of what it is reading."""
+    from flba.analysis.brief import chunks
+    parts = chunks({"label": "CS/HB 797", "title": "Nonprofit Corporations"},
+                   _long_bill(), [], budget=4000)
+    assert len(parts) > 1
+    for p in parts:
+        assert "CS/HB 797" in p["text"]
+        assert "Nonprofit Corporations" in p["text"]
+
+
+def test_a_long_bill_does_not_publish_more_than_a_short_one():
+    """Reading in parts yields more candidate claims; the reader's attention
+    did not grow with the page count."""
+    from flba.analysis.passes import IMPLICATION_CAP, PROVISION_CAP, PROVISIONS
+    schema_max = PROVISIONS["properties"]["provisions"]["maxItems"]
+    assert PROVISION_CAP <= schema_max
+    assert IMPLICATION_CAP >= 1
+
+
+def test_duplicate_quotes_across_parts_are_shown_once():
+    from flba.analysis.analyze import _dedupe
+    claims = [{"quote": "the same passage of law"},
+              {"quote": "The same passage, of law!"},
+              {"quote": "a different passage"}]
+    assert len(_dedupe(claims)) == 2
