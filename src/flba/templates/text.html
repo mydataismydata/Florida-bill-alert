@@ -2,28 +2,47 @@
 {% from "_marks.html" import marked %}
 {% block title %}{{ b.label }} full text · {{ site_name }}{% endblock %}
 {% block description %}Full text of {{ b.label }} with added and deleted language marked.{% endblock %}
+{% block masthead %}
+<header class="masthead compact">
+  <div class="wordmark"><a href="{{ root }}index.html">SESSION WATCH</a></div>
+  <nav>
+    <a href="{{ root }}index.html">BILLS</a>
+    <a href="{{ root }}calendar.html">CALENDAR</a>
+    <a href="{{ root }}about.html">ABOUT</a>
+    <a href="{{ root }}subscribe.html">SUBSCRIBE</a>
+    <button type="button" class="theme-toggle" data-theme-toggle>DARK MODE</button>
+  </nav>
+</header>
+{% endblock %}
 {% block body %}
-<h1>{{ b.label }} — full text</h1>
-<p class="sub">{{ b.title }}</p>
-<p class="meta">Version {{ version }}{% if fmt == 'house-pdf' %} · rendered from the
-   official PDF, which the Legislature publishes in no other format{% endif %} ·
-   <a href="{{ root }}bills/{{ b.num }}.html">back to the summary</a> ·
-   <a href="{{ b.url }}" target="_blank" rel="noopener">official record</a></p>
+<section class="pagehead">
+  <div style="font:400 10px var(--mono);letter-spacing:.3em;color:var(--ink3)">THE BILL ITSELF</div>
+  <h1>{{ b.label }}</h1>
+  <div class="billtitle" style="font-size:20px">{{ b.title }}</div>
+  <p class="meta" style="font:400 11px var(--mono);letter-spacing:.08em;color:var(--ink3);margin:14px 0 0">
+    VERSION {{ version }}{% if fmt == 'house-pdf' %} · RENDERED FROM THE OFFICIAL PDF,
+    WHICH THE LEGISLATURE PUBLISHES IN NO OTHER FORMAT{% endif %} ·
+    <a href="{{ root }}bills/{{ b.num }}.html" style="color:var(--acc2)">BACK TO THE SUMMARY</a> ·
+    <a href="{{ b.url }}" target="_blank" rel="noopener" style="color:var(--acc2)">OFFICIAL RECORD</a></p>
+</section>
 
-<p class="legend noprint"><span class="k a">underlined</span> language is being
-   added; <span class="k d">struck</span> language is being deleted. Line
-   numbers are the Legislature's own — the same ones amendments cite.</p>
+<section class="wrap" style="padding-top:20px;padding-bottom:46px">
+  <p class="legend noprint"><span class="k a">underlined</span> language is being
+     added; <span class="k d">struck</span> language is being deleted. Line
+     numbers are the Legislature's own — the same ones amendments cite.</p>
 
-{% if heavy %}
-<p class="meta noprint">This is a long document — {{ '{:,}'.format(chars) }}
-   characters. It may take a moment to load on a phone.</p>
-{% endif %}
-<div class="doc">
-{% for ln in lines %}
-  <div class="ln{{ ' chg' if ln.changed }}"{% if ln.line %} id="L{{ ln.line }}"{% endif %}>
-    <span class="no">{% if ln.line %}<a href="#L{{ ln.line }}">{{ ln.line }}</a>{% endif %}</span>
-    <span class="tx">{{ marked(ln.parts) }}</span>
+  {% if heavy %}
+  <p class="legend noprint" style="color:var(--ink3)">This is a long document —
+     {{ '{:,}'.format(chars) }} characters. It may take a moment to load on a phone.</p>
+  {% endif %}
+
+  <div class="doc">
+  {% for ln in lines %}
+    <div class="ln{{ ' chg' if ln.changed }}"{% if ln.line %} id="L{{ ln.line }}"{% endif %}>
+      <span class="no">{% if ln.line %}<a href="#L{{ ln.line }}">{{ ln.line }}</a>{% endif %}</span>
+      <span class="tx">{{ marked(ln.parts) }}</span>
+    </div>
+  {% endfor %}
   </div>
-{% endfor %}
-</div>
+</section>
 {% endblock %}

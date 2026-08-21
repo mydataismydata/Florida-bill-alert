@@ -429,3 +429,32 @@ input[type="checkbox"]:focus-visible + .box { outline: 2px solid var(--acc); }
   a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 9px; }
   .quote, .aibox, .factledger { break-inside: avoid; }
 }
+
+/* ========================================================= the bill itself
+ * Rewriting the stylesheet for the redesign dropped these, so the marked-up
+ * text rendered unstyled -- flush against the left edge with no line-number
+ * column. It is a document, so it keeps the page's padding and reads in mono
+ * with the Legislature's own line numbers down the side.
+ */
+.doc { margin: 22px 0 0; border-top: 1px solid var(--ru2);
+  font: 400 13px/1.85 var(--mono); }
+.doc .ln { display: flex; gap: 18px; padding: 1px 8px; }
+.doc .ln.chg { background: var(--bg1); }
+.doc .ln:target { background: var(--bg1); outline: 2px solid var(--acc); }
+.doc .no { flex: 0 0 3.4rem; text-align: right; color: var(--ink3);
+  user-select: none; font-size: 11.5px; }
+.doc .no a { color: inherit; }
+.doc .no a:hover { color: var(--acc); }
+.doc .tx { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
+
+/* Added and struck language. The document marks them with <ins>/<del>; the
+   legend shows the same two states as .k swatches. Browser defaults already
+   underline and strike, but leave them the body colour. */
+.doc ins, .k.a { color: var(--acc); text-decoration: underline;
+  text-underline-offset: 2px; }
+.doc del, .k.d { color: var(--maj); text-decoration: line-through; }
+.doc ins, .doc del { background: none; }
+.k { padding: 0 .18em; }
+.legend { margin: 16px 0 0; font-size: 13.5px; color: var(--ink2); }
+
+@media print { .noprint { display: none !important; } }

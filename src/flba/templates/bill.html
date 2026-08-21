@@ -145,9 +145,14 @@
        and deletes {{ '{:,}'.format(stats.words_deleted) }} across
        {{ '{:,}'.format(total_changes) }} places.</p>
     {% endif %}
-    {% if has_text %}
-    <a class="outline" href="{{ root }}bills/{{ b.num }}-text.html">READ THE MARKED-UP BILL →</a>
     {% endif %}
+
+    {# Outside the statutes block on purpose. 268 bills have marked-up text and
+       amend no general statute -- a local act, a claim bill -- and gating the
+       link on `refs` hid the text on every one of them. #}
+    {% if has_text %}
+    {% if not refs %}<div class="slabel">THE BILL ITSELF</div>{% endif %}
+    <a class="outline" href="{{ root }}bills/{{ b.num }}-text.html">READ THE MARKED-UP BILL →</a>
     {% endif %}
 
     {% if analyses %}

@@ -463,3 +463,41 @@ def test_every_template_renders_for_every_bill(built):
         assert pages, suffix
         for p in pages:
             assert p.stat().st_size > 500, p
+
+
+def test_a_bill_with_text_always_links_to_it(built):
+    """The link used to sit inside the statutes block, so 268 bills that amend
+    no general statute -- local acts, claim bills -- rendered marked-up text
+    that nothing on the page pointed at."""
+    from bs4 import BeautifulSoup
+    out, _ = built
+    checked = 0
+    for page in (out / "bills").glob("*.html"):
+        if page.stem.endswith(SUBPAGES):
+            continue
+        if not (out / "bills" / f"{page.stem}-text.html").exists():
+            continue
+        checked += 1
+        soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
+        assert soup.find("a", href=f"../bills/{page.stem}-text.html"), page.name
+    assert checked
+
+
+def test_the_full_text_page_is_inside_the_page_padding(built):
+    """It rendered flush against the left edge: the redesign's <main> adds no
+    padding of its own and the template had no container."""
+    from bs4 import BeautifulSoup
+    out, _ = built
+    page = next((out / "bills").glob("*-text.html"))
+    soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
+    doc = soup.select_one(".doc")
+    assert doc, "no document body"
+    assert doc.find_parent(class_="wrap"), "document is not inside a padded container"
+
+
+def test_the_full_text_page_keeps_its_stylesheet(built):
+    """Rewriting style.css for the redesign dropped every rule this page used."""
+    out, _ = built
+    css = (out / "style.css").read_text(encoding="utf-8")
+    for rule in (".doc", ".doc .ln", ".doc .no", ".doc .tx", ".doc ins", ".doc del"):
+        assert rule in css, rule
