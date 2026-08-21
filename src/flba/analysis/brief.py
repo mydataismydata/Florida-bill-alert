@@ -135,5 +135,21 @@ def build(bill: dict, diff: BillDiff, refs: list[dict],
 
 
 def source_text(diff: BillDiff) -> str:
-    """The full bill as one string, for verifying quotes against."""
+    """The bill as printed: existing law with additions and deletions both in
+    place. The only reading that contains a passage spanning an edit."""
     return " ".join(s.text for s in diff.segments)
+
+
+def readings(diff: BillDiff) -> list[str]:
+    """Every text a faithful quote could have come from.
+
+    An amendatory bill is not one document. Where it substitutes a word the
+    page shows the old and the new together, so the sentence a reader would
+    quote -- either before the change or after it -- appears in neither the
+    page nor each other. All three are the bill.
+    """
+    return [
+        " ".join(s.text for s in diff.segments if s.kind != DELETE),   # as amended
+        " ".join(s.text for s in diff.segments if s.kind != INSERT),   # as it stands
+        source_text(diff),                                             # as printed
+    ]

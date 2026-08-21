@@ -530,6 +530,70 @@ def cmd_statutes(args) -> int:
     return 0
 
 
+def cmd_reverify(args) -> int:
+    """Re-check stored quotes against the current verifier.
+
+    The verifier used to compare against the printed page only, which for an
+    inline substitution reads "Florida Statutes 2026 2025" -- a sentence in no
+    version of the law. Quotes of the amended reading were dropped as
+    inventions. This re-checks what was dropped and restores whatever was
+    real all along. No model runs; nothing new is asserted.
+    """
+    import json as _json
+    from .analysis.analyze import load_bill
+    from .analysis.brief import readings
+    from .analysis.verify import Verifier
+
+    store = Store(DATA / "index.sqlite")
+    db = store.db
+    rows = db.execute("SELECT num FROM analysis_ai WHERE session=? ORDER BY num",
+                      (args.session,)).fetchall()
+    moved = touched = 0
+    for r in rows:
+        rec = db.execute("SELECT * FROM analysis_ai WHERE session=? AND num=?",
+                         (args.session, r["num"])).fetchone()
+        dropped = _json.loads(rec["dropped"] or "[]")
+        if not dropped:
+            continue
+        loaded = load_bill(db, args.session, r["num"])
+        if loaded is None:
+            continue
+        verifier = Verifier(readings(loaded[2]))
+        keep_drop, back = [], {"provisions": [], "implications": []}
+        for claim in dropped:
+            where = claim.get("pass_name")
+            check = verifier.check(claim.get("quote", ""))
+            if check.ok and where in back:
+                claim = {k: v for k, v in claim.items()
+                         if k not in ("pass_name", "drop_reason")}
+                claim["quote"] = check.quote
+                claim["quote_status"] = check.status
+                back[where].append(claim)
+            else:
+                keep_drop.append(claim)
+        if not (back["provisions"] or back["implications"]):
+            continue
+        prov = _json.loads(rec["provisions"] or "[]") + back["provisions"]
+        impl = _json.loads(rec["implications"] or "[]") + back["implications"]
+        stats = _json.loads(rec["stats"] or "{}")
+        stats["claims_kept"] = len(prov) + len(impl)
+        stats["claims_dropped"] = len(keep_drop)
+        total = stats["claims_kept"] + stats["claims_dropped"]
+        stats["verify_rate"] = round(1 - stats["claims_dropped"] / total, 3) if total else None
+        stats["reverified"] = True
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("UPDATE analysis_ai SET provisions=?, implications=?,"
+                   " dropped=?, stats=? WHERE session=? AND num=?",
+                   (_json.dumps(prov), _json.dumps(impl), _json.dumps(keep_drop),
+                    _json.dumps(stats), args.session, r["num"]))
+        db.execute("COMMIT")
+        n = len(back["provisions"]) + len(back["implications"])
+        moved += n; touched += 1
+        print(f"  {rec['num']:>6}  restored {n}")
+    print(f"\nreverify: {moved} claims restored across {touched} bills")
+    return 0
+
+
 def cmd_members(args) -> int:
     """Fetch the Senate's page for every member who has sponsored a bill.
 
@@ -729,7 +793,8 @@ def main(argv=None) -> int:
                      ("diff", cmd_diff), ("track", cmd_track),
                      ("crossref", cmd_crossref), ("statutes", cmd_statutes),
                      ("analyze", cmd_analyze), ("build", cmd_build),
-                     ("members", cmd_members), ("status", cmd_status)):
+                     ("members", cmd_members), ("reverify", cmd_reverify),
+                     ("status", cmd_status)):
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
         sp.add_argument("--refresh", action="store_true",

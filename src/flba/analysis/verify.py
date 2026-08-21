@@ -65,12 +65,32 @@ class Check:
 
 
 class Verifier:
-    """Holds one bill's text and answers whether a quote really came from it."""
+    """Holds one bill's text and answers whether a quote really came from it.
 
-    def __init__(self, source: str, min_words: int = 3):
-        self.canon = canonical(source)
-        self.loose = loose_key(source)
+    An amendatory bill has no single text. Where it substitutes a word inline
+    the document carries both -- SB 100 replaces the year twelve times, so
+    running the segments together reads "Florida Statutes 2026 2025", which is
+    a sentence that exists in no version of the law. A model quoting either
+    the amended reading or the existing one is quoting the bill correctly, and
+    checking against the concatenation rejected both: 41.8% of everything ever
+    dropped was a real quote thrown away on this.
+
+    So a quote is checked against three readings. What the law will say
+    (plain + additions), what it says now (plain + deletions), and the
+    document as printed, which is the only one that contains a passage
+    spanning an edit on both sides.
+    """
+
+    def __init__(self, source, min_words: int = 3):
+        # A plain string is still accepted: it is one reading.
+        texts = source if isinstance(source, (list, tuple)) else [source]
+        self.canons = [canonical(t) for t in texts if t]
+        self.looses = [loose_key(t) for t in texts if t]
         self.min_words = min_words
+
+    @property
+    def canon(self) -> str:            # kept for callers that inspect it
+        return self.canons[0] if self.canons else ""
 
     def check(self, quote: str) -> Check:
         q = canonical(quote)
@@ -78,10 +98,10 @@ class Verifier:
             return Check(FAILED, quote, "empty quote")
         if len(q.split()) < self.min_words:
             return Check(FAILED, quote, "too short to identify a passage")
-        if q in self.canon:
+        if any(q in c for c in self.canons):
             return Check(EXACT, q)
         lk = loose_key(quote)
-        if lk and lk in self.loose:
+        if lk and any(lk in l for l in self.looses):
             # same words, different punctuation or spacing
             return Check(LOOSE, q)
         return Check(FAILED, quote, "not found in the bill text")

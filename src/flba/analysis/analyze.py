@@ -10,7 +10,7 @@ from ..diff import BillDiff, Segment
 from . import passes as P
 from .backend import Backend
 from .brief import build as build_brief
-from .brief import source_text
+from .brief import readings
 from .verify import Verifier, is_degenerate, verify_claims
 
 # Models return the citation both ways -- "493.6102" and "s. 493.6102" -- and
@@ -93,7 +93,7 @@ def analyze(db, session: str, num: int, backend: Backend,
     bill, version, diff, refs = loaded
 
     brief = build_brief(bill, diff, refs, budget=budget)
-    verifier = Verifier(source_text(diff))
+    verifier = Verifier(readings(diff))
     # What the bill actually strikes, for checking claims of repeal against.
     deleted_text = " ".join(s.text for s in diff.deletions)
     out = Analysis(session=session, num=num, label=bill.get("label", ""),

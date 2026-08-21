@@ -299,3 +299,48 @@ def test_the_caps_sit_above_what_the_model_actually_writes():
     assert IMPLICATIONS["properties"]["unclear"]["items"]["maxLength"] > 766
     from flba.analysis.schema import SUMMARY
     assert SUMMARY["properties"]["who_is_affected"]["items"]["maxLength"] > 165
+
+
+# --- an amendatory bill has more than one text ------------------------------
+
+def _diff(*parts):
+    from flba.diff import Segment, BillDiff
+    return BillDiff("html", [Segment(k, t, 1, None) for k, t in parts])
+
+
+def test_a_quote_of_the_amended_reading_verifies():
+    """SB 100 replaces the year inline twelve times, so running the segments
+    together reads "Florida Statutes 2026 2025" -- a sentence in no version of
+    the law. Quoting what the law will say is quoting the bill."""
+    from flba.analysis.brief import readings
+    from flba.analysis.verify import Verifier
+    d = _diff(("plain", "the title of Florida Statutes"), ("insert", "2026"),
+              ("delete", "2025"), ("plain", "and shall take effect"))
+    v = Verifier(readings(d))
+    assert v.check("the title of Florida Statutes 2026 and shall take effect").ok
+    assert v.check("the title of Florida Statutes 2025 and shall take effect").ok
+
+
+def test_a_quote_spanning_an_edit_still_verifies():
+    """The printed page is one of the readings, so a span that crosses an
+    edit on both sides is still found."""
+    from flba.analysis.brief import readings
+    from flba.analysis.verify import Verifier
+    d = _diff(("plain", "the title of Florida Statutes"), ("insert", "2026"),
+              ("delete", "2025"), ("plain", "and shall take effect"))
+    assert Verifier(readings(d)).check("Florida Statutes 2026 2025 and shall").ok
+
+
+def test_an_invention_still_fails_against_every_reading():
+    from flba.analysis.brief import readings
+    from flba.analysis.verify import Verifier
+    d = _diff(("plain", "the title of Florida Statutes"), ("insert", "2026"),
+              ("delete", "2025"))
+    v = Verifier(readings(d))
+    assert not v.check("local governments may not levy an assessment").ok
+
+
+def test_a_plain_string_source_still_works():
+    """Callers that pass one text keep working."""
+    from flba.analysis.verify import Verifier
+    assert Verifier("the quick brown fox jumps").check("quick brown fox").ok
