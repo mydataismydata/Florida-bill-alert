@@ -344,3 +344,39 @@ def test_a_plain_string_source_still_works():
     """Callers that pass one text keep working."""
     from flba.analysis.verify import Verifier
     assert Verifier("the quick brown fox jumps").check("quick brown fox").ok
+
+
+# --- a ceiling is not an inverted prohibition -------------------------------
+
+def test_a_cap_permits_everything_under_it():
+    """"Compensation may not exceed 125 percent" means a provider may bill up
+    to 125 percent. Saying so is a correct reading, not an inverted one. Six
+    of the seventeen claims this guard removed were of that shape."""
+    assert not flags_inverted_prohibition(
+        "A hospital is permitted to bill up to 125% of the Medicare rate.",
+        "Compensation to a health care provider may not exceed 125 percent of "
+        "the Medicare allowable rate")
+    assert not flags_inverted_prohibition(
+        "The maximum number of terms a board member can serve rises to three.",
+        "a member of the board may not serve for more than three 4-year terms")
+
+
+def test_a_flat_prohibition_read_as_permission_is_still_caught():
+    """CS/CS/SB 118 -- the one claim this guard was right about."""
+    assert flags_inverted_prohibition(
+        "Assessments can be levied on the entire parking space, including the "
+        "area beyond the maximum RV unit size.",
+        "may not be levied against the portion of a recreational vehicle "
+        "parking space or campsite")
+
+
+def test_wanting_something_is_not_a_political_motive():
+    """Fired twice across 187 bills and was wrong both times: an idiom about
+    applicants, and a category of patron the bill defines."""
+    assert not flags_intent(
+        "Applicants can take the exam as many times as they want in a year.")
+    assert not flags_intent(
+        "Vendors may sell to patrons who intend to leave with it.")
+    # naming an actor still counts
+    assert flags_intent("The sponsor wants to expand the exemption.")
+    assert flags_intent("Senator Gaetz pushed for this change.")

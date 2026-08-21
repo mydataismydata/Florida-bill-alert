@@ -142,14 +142,16 @@ ACTORS = (r"sponsor|author|lawmaker|legislator|"
 # "Representative Smith".
 TITLED = r"(?-i:\b(?:Senator|Representative|Rep\.|Sen\.)\s+[A-Z])"
 
+# A pronoun and a wanting-verb used to count as attributing motive. Over 187
+# bills that clause fired twice and was wrong both times: "as many times as
+# they want" is an idiom about applicants, and "patrons who intend to leave
+# with it" is a legal category the bill defines. Motive attribution needs a
+# political actor named, which the list above already requires.
 INTENT_LANGUAGE = re.compile(
     # naming a political actor at all, in what should be textual analysis
     rf"\b(?:{ACTORS})s?\b|{TITLED}"
-    # or attributing a want to someone
-    r"|\b(?:who|they|he|she|which)\s+(?:really\s+)?"
-    r"(?:want|wants|wanted|intend|intends|intended|hope|hopes)\b"
     r"|\b(?:real|true|hidden|underlying)\s+(?:motive|intent|intention|purpose|agenda)\b"
-    r"|\b(?:motivated by|agenda|pretext|smokescreen)\b",
+    r"|\b(?:motivated by|pretext|smokescreen)\b",
     re.I)
 
 # Retrying is only useful if something about the request changes. This server
@@ -288,9 +290,23 @@ def flags_false_repeal(text: str, deleted: str) -> str | None:
     return None
 
 
+# "Compensation may not exceed 125 percent of the Medicare rate" is a ceiling,
+# and a ceiling genuinely permits everything under it -- so "a hospital may
+# bill up to 125 percent" is a correct reading, not an inverted one. Six of
+# the seventeen claims this guard removed were of exactly that shape,
+# including one whose own wording said "the MAXIMUM number of terms".
+CEILING = re.compile(
+    r"\b(?:may|shall|must|can)\s+not\s+[^.;]{0,48}?"
+    r"(?:exceed|more than|greater than|less than|longer than)\b"
+    r"|\bnot to exceed\b|\bno more than\b|\bnot (?:more|less) than\b",
+    re.I)
+
+
 def flags_inverted_prohibition(consequence: str, quote: str) -> str | None:
     """Catch a claim that reads a prohibition as though it granted permission."""
     if not PROHIBITION.search(quote or ""):
+        return None
+    if CEILING.search(quote or ""):
         return None
     if NEGATED.search(consequence or ""):
         return None

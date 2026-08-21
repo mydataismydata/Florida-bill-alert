@@ -540,6 +540,7 @@ def cmd_reverify(args) -> int:
     real all along. No model runs; nothing new is asserted.
     """
     import json as _json
+    from .analysis import passes as P
     from .analysis.analyze import load_bill
     from .analysis.brief import readings
     from .analysis.verify import Verifier
@@ -553,7 +554,8 @@ def cmd_reverify(args) -> int:
         rec = db.execute("SELECT * FROM analysis_ai WHERE session=? AND num=?",
                          (args.session, r["num"])).fetchone()
         dropped = _json.loads(rec["dropped"] or "[]")
-        if not dropped:
+        flagged = _json.loads(rec["flagged"] or "[]")
+        if not dropped and not flagged:
             continue
         loaded = load_bill(db, args.session, r["num"])
         if loaded is None:
@@ -571,6 +573,20 @@ def cmd_reverify(args) -> int:
                 back[where].append(claim)
             else:
                 keep_drop.append(claim)
+        # A claim the guards removed goes back if the narrowed guards no
+        # longer object. Only implications are guarded, so that is where they
+        # return to.
+        keep_flag = []
+        for claim in flagged:
+            hit = (P.flags_intent(claim.get("consequence", ""))
+                   or P.flags_inverted_prohibition(claim.get("consequence", ""),
+                                                   claim.get("quote", "")))
+            if hit:
+                keep_flag.append(dict(claim, flagged_for=hit))
+            else:
+                back["implications"].append(
+                    {k: v for k, v in claim.items() if k != "flagged_for"})
+
         if not (back["provisions"] or back["implications"]):
             continue
         prov = _json.loads(rec["provisions"] or "[]") + back["provisions"]
@@ -578,14 +594,16 @@ def cmd_reverify(args) -> int:
         stats = _json.loads(rec["stats"] or "{}")
         stats["claims_kept"] = len(prov) + len(impl)
         stats["claims_dropped"] = len(keep_drop)
+        stats["claims_flagged"] = len(keep_flag)
         total = stats["claims_kept"] + stats["claims_dropped"]
         stats["verify_rate"] = round(1 - stats["claims_dropped"] / total, 3) if total else None
         stats["reverified"] = True
         db.execute("BEGIN IMMEDIATE")
         db.execute("UPDATE analysis_ai SET provisions=?, implications=?,"
-                   " dropped=?, stats=? WHERE session=? AND num=?",
+                   " dropped=?, flagged=?, stats=? WHERE session=? AND num=?",
                    (_json.dumps(prov), _json.dumps(impl), _json.dumps(keep_drop),
-                    _json.dumps(stats), args.session, r["num"]))
+                    _json.dumps(keep_flag), _json.dumps(stats),
+                    args.session, r["num"]))
         db.execute("COMMIT")
         n = len(back["provisions"]) + len(back["implications"])
         moved += n; touched += 1
