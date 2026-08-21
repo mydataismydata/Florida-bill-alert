@@ -649,6 +649,13 @@ def cmd_analyze(args) -> int:
         rows = db.execute(ORDER_SQL[args.order] if args.order in ORDER_SQL
                           else ORDER_SQL["number"], (args.session,)).fetchall()
         nums = [r["num"] for r in rows if r["num"] not in done]
+        if args.enacted:
+            # What became law is what actually binds anyone, so it is worth
+            # analysing first even though it is 12% of the session.
+            enacted = {r["num"] for r in db.execute(
+                "SELECT num FROM bill WHERE session=? AND chapter_law<>''",
+                (args.session,))}
+            nums = [n for n in nums if n in enacted]
         if args.limit:
             nums = nums[:args.limit]
 
@@ -760,6 +767,8 @@ def main(argv=None) -> int:
                             help="stop after N bills -- run in chunks")
             sp.add_argument("--order", default="activity",
                             choices=["number", "live", "activity"])
+            sp.add_argument("--enacted", action="store_true",
+                            help="only bills that became law")
             sp.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
             sp.add_argument("--model",
                             default="mlx-community/Qwen3.8-27B-4bit")
