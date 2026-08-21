@@ -66,6 +66,19 @@
     <p class="provided">{{ b.long_title }}</p>
     {% endif %}
 
+    {# The bill's own words come before anyone's reading of them, so this sits
+       above the analysis rather than in the margin beside it. #}
+    {% if has_text %}
+    <a class="billtext" href="{{ root }}bills/{{ b.num }}-text.html">
+      <span class="lede">Read the bill itself →</span>
+      <span class="sub">{% if stats.words_inserted or stats.words_deleted %}The
+        latest markup adds {{ '{:,}'.format(stats.words_inserted) }} words and
+        deletes {{ '{:,}'.format(stats.words_deleted) }} across
+        {{ '{:,}'.format(total_changes) }} places, with the Legislature's own
+        line numbers{% else %}Every line, with the Legislature's own numbering{% endif %}.</span>
+    </a>
+    {% endif %}
+
     <section class="aibox">
       <header>
         <h2>Plain English Summary</h2>
@@ -140,19 +153,6 @@
       </div>
       {% endfor %}
     </div>
-    {% if stats.words_inserted or stats.words_deleted %}
-    <p class="note">The latest markup adds {{ '{:,}'.format(stats.words_inserted) }} words
-       and deletes {{ '{:,}'.format(stats.words_deleted) }} across
-       {{ '{:,}'.format(total_changes) }} places.</p>
-    {% endif %}
-    {% endif %}
-
-    {# Outside the statutes block on purpose. 268 bills have marked-up text and
-       amend no general statute -- a local act, a claim bill -- and gating the
-       link on `refs` hid the text on every one of them. #}
-    {% if has_text %}
-    {% if not refs %}<div class="slabel">THE BILL ITSELF</div>{% endif %}
-    <a class="outline" href="{{ root }}bills/{{ b.num }}-text.html">READ THE MARKED-UP BILL →</a>
     {% endif %}
 
     {% if analyses %}

@@ -479,7 +479,14 @@ def test_a_bill_with_text_always_links_to_it(built):
             continue
         checked += 1
         soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
-        assert soup.find("a", href=f"../bills/{page.stem}-text.html"), page.name
+        link = soup.select_one("a.billtext")
+        assert link, page.name
+        assert link["href"].endswith(f"{page.stem}-text.html")
+        # the bill's own words come before anyone's reading of them
+        assert not link.find_parent(class_="side"), page.name
+        box = soup.select_one("section.aibox")
+        if box:
+            assert link.sourceline < box.sourceline, page.name
     assert checked
 
 

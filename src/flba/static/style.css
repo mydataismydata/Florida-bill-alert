@@ -458,3 +458,14 @@ input[type="checkbox"]:focus-visible + .box { outline: 2px solid var(--acc); }
 .legend { margin: 16px 0 0; font-size: 13.5px; color: var(--ink2); }
 
 @media print { .noprint { display: none !important; } }
+
+/* The bill's own words, ahead of anyone's reading of them. */
+a.billtext { display: block; margin: 26px 0 0; padding: 18px 22px;
+  border: 1px solid var(--acc); background: var(--bg1); }
+a.billtext:hover { text-decoration: none; background: var(--acc);
+  border-color: var(--acc); }
+a.billtext .lede { display: block; font-size: 18px; font-weight: 700;
+  color: var(--acc); }
+a.billtext .sub { display: block; margin-top: 5px; font: 400 13.5px var(--mono);
+  line-height: 1.55; color: var(--ink2); }
+a.billtext:hover .lede, a.billtext:hover .sub { color: var(--aInk); }
