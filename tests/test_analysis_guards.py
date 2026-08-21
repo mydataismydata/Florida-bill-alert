@@ -182,9 +182,13 @@ def test_runs_of_different_kinds_stay_separate():
 
 def test_a_headline_cut_at_the_cap_is_rejected():
     """Constrained decoding closes the string at maxLength wherever the model
-    is, so SB 686 lost the noun off the end of "for agricultural"."""
-    cut = "Replaces comprehensive plan amendment process with direct development approval for agricultural"
-    assert len(cut) <= ONE_LINE_MAX
+    is, so SB 686 lost the noun off the end of "for agricultural". Built at
+    whatever the cap currently is, so raising it does not quietly disarm this.
+    """
+    tail = " approval for agricultural"
+    cut = "Replaces the comprehensive plan amendment process with direct"
+    cut = cut.ljust(ONE_LINE_MAX - len(tail), "x") + tail
+    assert len(cut) == ONE_LINE_MAX
     assert flags_cut_headline(cut)
 
 
@@ -208,17 +212,19 @@ def test_the_schema_no_longer_spells_out_a_bad_example():
 
 
 def test_a_headline_cut_mid_word_is_caught_even_ending_in_a_stop():
-    """CS/SB 572 came back "...promote related elected co-." -- 95 characters
-    and a full stop, but the word it cut in half is the tell."""
-    assert flags_cut_headline(
-        "Expands ethics rules to cover foster families and allows boards to "
-        "promote related elected co-.")
+    """CS/SB 572 came back "...promote related elected co-." -- at the cap,
+    ending in a full stop, and cut mid-word. The hyphen is the tell."""
+    tail = " promote related elected co-."
+    line = "Expands ethics rules to cover foster families and allows boards to"
+    line = line.ljust(ONE_LINE_MAX - len(tail), "x") + tail
+    assert len(line) == ONE_LINE_MAX
+    assert flags_cut_headline(line)
 
 
 def test_a_complete_headline_at_the_cap_survives():
-    assert not flags_cut_headline(
-        "Allows agricultural land to be developed for housing and industry "
-        "without a comprehensive plan.")
+    line = "Allows agricultural land to be developed for housing and industry"
+    line = line.ljust(ONE_LINE_MAX - len(" without a comprehensive plan."), "x")
+    assert not flags_cut_headline(line + " without a comprehensive plan.")
 
 
 # --- telling a retry what was wrong ----------------------------------------

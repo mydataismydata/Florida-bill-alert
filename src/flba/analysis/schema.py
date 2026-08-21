@@ -45,7 +45,13 @@ QUOTE = {
 
 # A headline that reaches this cap was cut off, not finished: constrained
 # decoding closes the string at the limit wherever the model happens to be.
-ONE_LINE_MAX = 95
+#
+# Set above the model's natural length, not at it. Brevity comes from the
+# instruction in SYSTEM -- median headline is 68 characters, p90 is 88 -- and
+# a cap pitched at the top of that distribution does not make anything
+# shorter, it just cuts the tail off the longest 3%. At 95 that cost
+# CS/HB 755 the end of "estuaries"; nothing has come within 15 of 110.
+ONE_LINE_MAX = 110
 
 SUMMARY = {
     "type": "object",
