@@ -91,14 +91,28 @@ def test_padded_output_is_rejected():
 
 # --- claiming a repeal the bill never makes --------------------------------
 
-# CS/CS/SB 182 added a prohibition on academic dismissal from charter schools
-# and deleted nothing but "shall", "state" and three list numbers. It came
-# back summarised as removing an "academic dismissal ban".
+# CS/SB 572 swaps a comma for a semicolon next to a clause about legal
+# residence and strikes nothing else. It came back summarised as removing a
+# residence requirement, across three differently-worded attempts.
+SB572_DELETIONS = " , , "
+
+# CS/CS/SB 182 struck "remaining funds have reverted to the state" among other
+# fragments, so it is outside what this guard can contradict -- its inverted
+# summary is handled upstream, by the marker-direction rules in SYSTEM and by
+# the brief no longer splitting one added sentence across four spans.
 SB182_DELETIONS = "remaining funds have reverted to the state shall state 1. 2. 3."
 
 
-def test_a_repeal_the_bill_never_makes_is_flagged():
+def test_a_repeal_against_a_bill_that_strikes_nothing_is_flagged():
     assert flags_false_repeal(
+        "Removes the requirement that a relative share a legal residence.",
+        SB572_DELETIONS)
+
+
+def test_the_guard_stays_out_of_it_once_the_bill_strikes_words():
+    """Deliberately narrow. Whether the struck words match the claim is a
+    judgement, and making it cost four correct summaries out of five."""
+    assert not flags_false_repeal(
         "Removes academic dismissal ban, mandates cursive, and eases zoning.",
         SB182_DELETIONS)
 
@@ -110,10 +124,22 @@ def test_a_real_repeal_is_not_flagged():
         "shall report annually to the department")
 
 
-def test_a_repeal_of_a_prohibition_needs_a_struck_prohibition():
-    struck = "a school district may not charge a fee for the transfer"
-    assert not flags_false_repeal("Lifts the ban on transfer fees.", struck)
-    assert flags_false_repeal("Lifts the ban on transfer fees.", "shall 1. 2.")
+def test_struck_words_are_enough_even_when_they_do_not_match_the_claim():
+    """SB 7004 strikes "shall stand repealed on October 2, 2026" and the model
+    called that removing a deadline. Matching the claim's noun against the
+    struck language rejected it, and was wrong four times in five."""
+    assert not flags_false_repeal(
+        "Removes a scheduled deadline that would have ended the privacy "
+        "protection.",
+        "This paragraph is subject to the Open Government Sunset Review Act "
+        "and shall stand repealed on October 2, 2026")
+
+
+def test_a_removal_achieved_by_adding_language_is_not_flagged():
+    """CS/CS/CS/HB 399 eliminates local discretion by ADDING a preemption --
+    a real removal that strikes almost nothing."""
+    assert not flags_false_repeal(
+        "Eliminates local discretion to ban such housing.", "be placed")
 
 
 def test_ordinary_summaries_are_not_flagged():
@@ -219,3 +245,51 @@ def test_the_note_reaches_the_model_and_only_on_a_retry():
     assert "too long" in again[1]["content"]
     # the system prompt is untouched, so the cached prefix still matches
     assert first[0] == again[0]
+
+
+# --- runaway fields --------------------------------------------------------
+
+def test_every_free_string_in_every_schema_has_a_ceiling():
+    """Greedy decoding cannot break out of a repetition loop. On SB 7004 the
+    statute field repeated one phrase until it exhausted the token budget,
+    three attempts running, and the provision was lost. An enum is bounded by
+    its options; anything else needs a maxLength."""
+    from flba.analysis.schema import IMPLICATIONS, PROVISIONS, SUMMARY
+
+    unbounded = []
+
+    def walk(node, path):
+        if not isinstance(node, dict):
+            return
+        if node.get("type") == "string" and "enum" not in node:
+            if "maxLength" not in node:
+                unbounded.append(path)
+        for key in ("properties", "items", "$defs"):
+            child = node.get(key)
+            if isinstance(child, dict):
+                if key == "items":
+                    walk(child, f"{path}[]")
+                else:
+                    for name, sub in child.items():
+                        walk(sub, f"{path}.{name}")
+
+    for name, schema in (("SUMMARY", SUMMARY), ("PROVISIONS", PROVISIONS),
+                         ("IMPLICATIONS", IMPLICATIONS)):
+        walk(schema, name)
+    assert not unbounded, unbounded
+
+
+def test_the_caps_sit_above_what_the_model_actually_writes():
+    """A ceiling that bites is the headline bug again -- truncation mid-word."""
+    from flba.analysis.schema import IMPLICATIONS, PROVISIONS
+    prov = PROVISIONS["properties"]["provisions"]["items"]["properties"]
+    impl = IMPLICATIONS["properties"]["implications"]["items"]["properties"]
+    # longest values observed across 322 provisions and 265 implications
+    assert prov["heading"]["maxLength"] > 93
+    assert prov["effect"]["maxLength"] > 313
+    assert prov["statute"]["maxLength"] > 55
+    assert impl["consequence"]["maxLength"] > 568
+    assert IMPLICATIONS["properties"]["reading"]["maxLength"] > 1535
+    assert IMPLICATIONS["properties"]["unclear"]["items"]["maxLength"] > 766
+    from flba.analysis.schema import SUMMARY
+    assert SUMMARY["properties"]["who_is_affected"]["items"]["maxLength"] > 165

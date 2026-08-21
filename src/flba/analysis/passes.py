@@ -259,24 +259,32 @@ REPEAL_CLAIM = re.compile(
     r"requirements?|mandates?|duty|duties|obligations?)\b",
     re.I)
 
-DUTY = re.compile(r"\b(?:shall|must|is required|are required|required to|"
-                  r"may not|shall not)\b", re.I)
-
-# Which body of struck language would have to exist for the claim to be true.
-_BARRIER_WORDS = {"ban", "bans", "prohibition", "prohibitions", "protection",
-                  "protections", "restriction", "restrictions", "bar",
-                  "safeguard", "safeguards"}
+# Any struck word at all. Nothing more clever: matching the claim's noun
+# against a vocabulary of struck language was wrong four times in five.
+#
+# SB 7004 strikes "shall stand repealed on October 2, 2026" and the model
+# correctly called that removing a deadline -- rejected, because the noun it
+# named was "protection" and no prohibition was struck. HB 399 eliminates
+# local discretion by ADDING a preemption, which is a real removal achieved
+# without deleting anything; also rejected. A bill's effect can remove
+# something its markup only adds, and no regex over the claim's wording is
+# going to know the difference.
+#
+# What a diff can flatly contradict is narrower: a bill that strikes no words
+# at all repeals nothing. SB 572 deletes two commas and was summarised as
+# removing a residence requirement. That is the case this catches, and the
+# judgement calls are left to the reader.
+_STRUCK_WORD = re.compile(r"[A-Za-z]{2,}")
 
 
 def flags_false_repeal(text: str, deleted: str) -> str | None:
-    """Catch a claim that the bill repeals something it never deletes."""
+    """Catch a claim of repeal against a bill that strikes no words."""
+    if _STRUCK_WORD.search(deleted or ""):
+        return None
     for m in REPEAL_CLAIM.finditer(text or ""):
-        want = (PROHIBITION if m.group("what").lower() in _BARRIER_WORDS
-                else DUTY)
-        if not want.search(deleted or ""):
-            claim = " ".join(m.group(0).split())
-            return (f"claims a repeal ({claim!r}) but the bill deletes no "
-                    f"such language")
+        claim = " ".join(m.group(0).split())
+        return (f"claims a repeal ({claim!r}) but the bill strikes no words "
+                f"at all")
     return None
 
 

@@ -83,7 +83,8 @@ SUMMARY = {
                             "paragraph."),
         },
         "who_is_affected": {
-            "type": "array", "items": {"type": "string"},
+            "type": "array",
+            "items": {"type": "string", "minLength": 3, "maxLength": 240},
             "description": "Groups of people or bodies directly affected.",
         },
     },
@@ -101,12 +102,21 @@ PROVISIONS = {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
+                    # Every free string needs a ceiling. Greedy decoding cannot
+                    # break out of a repetition loop on its own: on SB 7004 the
+                    # statute field repeated "(amends s. 119.071 at line 11...)"
+                    # until it exhausted the token budget, three attempts
+                    # running, discarding a provision that was otherwise right.
+                    # These sit above the longest value seen in 322 provisions,
+                    # so they stop a runaway without trimming real output.
                     "heading": {"type": "string", "minLength": 8,
+                                "maxLength": 120,
                                 "description": "Under 10 words."},
                     "effect": {"type": "string", "minLength": 60,
+                               "maxLength": 500,
                                "description": "What this provision does, in plain English."},
                     "quote": QUOTE,
-                    "statute": {"type": "string",
+                    "statute": {"type": "string", "maxLength": 80,
                                 "description": "Statute section, e.g. 493.6102. "
                                                "Empty string if none applies."},
                     "significance": {"type": "string",
@@ -131,7 +141,7 @@ IMPLICATIONS = {
         # Written first, and required to be substantial: reasoning in prose
         # before the list is what stops the model returning an empty one.
         "reading": {
-            "type": "string", "minLength": 150,
+            "type": "string", "minLength": 150, "maxLength": 2200,
             "description": ("Before listing anything: in 2-3 sentences, what "
                             "does this bill change about who may, must, or "
                             "cannot do what? Say plainly what it removes from "
@@ -145,7 +155,7 @@ IMPLICATIONS = {
                 "additionalProperties": False,
                 "properties": {
                     "consequence": {
-                        "type": "string", "minLength": 60,
+                        "type": "string", "minLength": 60, "maxLength": 700,
                         "description": ("A concrete situation this language would "
                                         "permit or require. Describe the text's "
                                         "effect. Never state or imply what any "
@@ -165,7 +175,8 @@ IMPLICATIONS = {
             },
         },
         "unclear": {
-            "type": "array", "maxItems": 5, "items": {"type": "string"},
+            "type": "array", "maxItems": 5,
+            "items": {"type": "string", "minLength": 20, "maxLength": 1000},
             "description": "Terms left undefined, or discretion left unbounded.",
         },
     },
