@@ -17,16 +17,23 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .analysis import passes as P
+from .areas import AREAS, classify, slug
 from .analysis.analyze import RETRIES
+from .analysis.analyze import tidy_statute
 from .analysis.brief import build as build_brief
 from .diff import PLAIN, BillDiff, Segment, context_blocks, locate
 from .diff import lines as doc_lines
 from .stages import kind_of, pathway, track
 
 HERE = Path(__file__).resolve().parent
-SITE_NAME = "Florida Bill Alert"
+SITE_NAME = "Session Watch"
 REPO = "https://github.com/mydataismydata/Florida-bill-alert"
 MAX_BLOCKS = 12           # changed passages on the summary page
+SHOWN_PROVISIONS = 2      # the rest are behind "N more provisions"
+
+# Florida's 67, for the subscribe form's optional county field.
+COUNTIES = ['Alachua', 'Baker', 'Bay', 'Bradford', 'Brevard', 'Broward', 'Calhoun', 'Charlotte', 'Citrus', 'Clay', 'Collier', 'Columbia', 'DeSoto', 'Dixie', 'Duval', 'Escambia', 'Flagler', 'Franklin', 'Gadsden', 'Gilchrist', 'Glades', 'Gulf', 'Hamilton', 'Hardee', 'Hendry', 'Hernando', 'Highlands', 'Hillsborough', 'Holmes', 'Indian River', 'Jackson', 'Jefferson', 'Lafayette', 'Lake', 'Lee', 'Leon', 'Levy', 'Liberty', 'Madison', 'Manatee', 'Marion', 'Martin', 'Miami-Dade', 'Monroe', 'Nassau', 'Okaloosa', 'Okeechobee', 'Orange', 'Osceola', 'Palm Beach', 'Pasco', 'Pinellas', 'Polk', 'Putnam', 'St. Johns', 'St. Lucie', 'Santa Rosa', 'Sarasota', 'Seminole', 'Sumter', 'Suwannee', 'Taylor', 'Union', 'Volusia', 'Wakulla', 'Walton', 'Washington']
+
 KIND_NAMES = {0: "plain", 1: "insert", 2: "delete"}
 SAFE_CITE = re.compile(r"^[0-9A-Za-z.]+$")
 
@@ -177,10 +184,14 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         history.setdefault(r["num"], []).append(dict(r))
 
     common = dict(site_name=SITE_NAME, session=session, built=built,
-                  repo=REPO, bill_count=len(bills), local=local)
+                  repo=REPO, bill_count=len(bills), local=local,
+                  areas=[{"name": a, "slug": slug(a)} for a in AREAS],
+                  page="")
 
     # ---------------------------------------------------------- bill pages
     index_rows, outcomes, enacted = [], {}, []
+    by_area: dict = {}
+    by_area_of: dict = {}
     progress: dict[int, object] = {}
     for i, b in enumerate(bills, 1):
         prog = track(history.get(b["num"], []), b["chapter_law"],
@@ -205,6 +216,9 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
             if ai:
                 for claim in (ai.get("provisions") or []) + (ai.get("implications") or []):
                     claim["line"] = locate(d, claim.get("quote", ""))
+                    # also applied at analysis time; repeated here so the
+                    # analyses stored before it existed render clean too
+                    claim["statute"] = tidy_statute(claim.get("statute", ""))
                     claim["statute_href"] = statute_page(
                         claim.get("statute", ""), statute_pages)
             all_blocks = context_blocks(d)
@@ -241,12 +255,14 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                             for n in P.ORDER],
                     **common), encoding="utf-8")
 
+        area = classify([r["statute"] for r in refs], b["title"] or "")
         _panels, members = split_sponsor(b["sponsor"] or "", committees)
         member = members_by_url.get(b["sponsor_url"] or "")
         html = env.get_template("bill.html").render(
             root="../", b=b, p=prog, path=pathway(prog), refs=refs,
             members=members, sponsor_has_committees=bool(_panels),
-            member=member,
+            member=member, area=area, area_slug=slug(area),
+            shown_provisions=SHOWN_PROVISIONS,
             blocks=blocks, total_blocks=len(all_blocks),
             has_text=loaded is not None,
             total_changes=sum(bk.changed for bk in all_blocks),
@@ -257,13 +273,16 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
 
         row = {
             "n": b["num"], "l": b["label"], "t": (b["title"] or "")[:120],
-            "o": prog.outcome_label, "k": prog.outcome,
+            "o": prog.outcome, "d": prog.outcome_label.upper(),
+            "a": area or "",
             "s": " ".join(filter(None, [
                 b["label"], b["title"], b["sponsor"], b["cosponsors"]])).lower(),
         }
         if b["chapter_law"]:
-            row["c"] = b["chapter_law"]
+            row["d"] = f"LAW · {b['chapter_law']}"
         index_rows.append(row)
+        by_area.setdefault(area, []).append(dict(b))
+        by_area_of[b["num"]] = area
         if b["chapter_law"]:
             enacted.append(b)
         if i % 400 == 0:
@@ -344,7 +363,67 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     (out / "index.html").write_text(env.get_template("index.html").render(
         root="", outcomes=outcome_cards, default_outcome=default_outcome,
         enacted=sorted(enacted, key=lambda b: b["num"]),
+        index_rows=index_rows,
         top_statutes=stat_rows[:10], **common), encoding="utf-8")
+
+    # ------------------------------------------------------------ areas
+    (out / "area").mkdir(parents=True, exist_ok=True)
+    for a in AREAS:
+        rows = sorted(by_area.get(a, []), key=lambda b: b["num"])
+        (out / "area" / f"{slug(a)}.html").write_text(
+            env.get_template("area.html").render(
+                root="../", area=a, area_slug=slug(a),
+                rows=[{"num": b["num"], "label": b["label"],
+                       "title": b["title"],
+                       "disposition": (f"LAW · {b['chapter_law']}" if b["chapter_law"]
+                                       else (progress[b["num"]].outcome_label.upper()
+                                             if b["num"] in progress else ""))}
+                      for b in rows],
+                **common), encoding="utf-8")
+
+    # --------------------------------------------------------- calendar
+    from .calendar import milestones, phase as cal_phase
+    hist_rows = [(h["date"], h["action"])
+                 for rows in history.values() for h in rows]
+    eff = [b["effective_date"] for b in bills
+           if b["chapter_law"] and b["effective_date"]]
+    m = milestones(hist_rows, eff)
+    today = date.fromisoformat(built)
+    label, key = cal_phase(today, m)
+    fmt = lambda d: d.strftime("%b %-d, %Y").upper()
+    (out / "calendar.html").write_text(env.get_template("calendar.html").render(
+        root="", today=fmt(today), phase_label=label, phase_key=key,
+        closed=key == "recess", action_count=len(hist_rows),
+        events=[{"date": fmt(d), "label": t} for d, t in m["events"]],
+        effective=[{"date": fmt(x["date"]), "n": x["n"], "big": x["big"]}
+                   for x in m["effective"]],
+        seasons=[
+            {"when": "JAN–MAR · DURING SESSION",
+             "what": "A daily alert naming every new bill in the areas you "
+                     "chose, with its plain-English summary, and lifecycle "
+                     "updates for bills already moving."},
+            {"when": "MAR–MAY · GOVERNOR ACTION",
+             "what": "Notice when a bill you follow is signed, vetoed, or "
+                     "becomes law without a signature."},
+            {"when": "JUN–DEC · INTERIM",
+             "what": "The weekly digest continues, covering filings for the "
+                     "next session as they appear and laws as they take effect."},
+        ],
+        **common), encoding="utf-8")
+
+    # -------------------------------------------------------- subscribe
+    from .areas import AREAS as _A
+    specimen = []
+    for b in sorted(enacted, key=lambda b: -b["num"])[:3]:
+        row = db.execute("SELECT one_line FROM analysis_ai WHERE session=? AND num=?",
+                         (session, b["num"])).fetchone()
+        specimen.append({"label": b["label"], "title": b["title"],
+                         "area": (by_area_of.get(b["num"]) or "GENERAL"),
+                         "one_line": row["one_line"] if row else ""})
+    (out / "subscribe.html").write_text(env.get_template("subscribe.html").render(
+        root="", counties=COUNTIES, specimen=specimen,
+        specimen_date=today.strftime("%a %b %-d").upper(), **common),
+        encoding="utf-8")
 
     (out / "about.html").write_text(env.get_template("about.html").render(
         root="", superseded=outcomes.get("superseded", 0), **common),

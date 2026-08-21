@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Session calendar · {{ site_name }}{% endblock %}
+{% block description %}When the Florida Legislature sits, when the Governor acts, and when the new laws take effect.{% endblock %}
+{% block masthead %}
+<header class="masthead compact">
+  <div class="wordmark"><a href="{{ root }}index.html">SESSION WATCH</a></div>
+  <nav>
+    <a href="{{ root }}index.html">BILLS</a>
+    <a href="{{ root }}calendar.html" class="on">CALENDAR</a>
+    <a href="{{ root }}about.html">ABOUT</a>
+    <a href="{{ root }}subscribe.html">SUBSCRIBE</a>
+    <button type="button" class="theme-toggle" data-theme-toggle>DARK MODE</button>
+  </nav>
+</header>
+{% endblock %}
+{% block body %}
+<section class="pagehead">
+  <div class="row">
+    <div>
+      <div style="font:400 10px var(--mono);letter-spacing:.3em;color:var(--ink3)">{{ session }} LEGISLATIVE YEAR</div>
+      <h1>Session calendar</h1>
+    </div>
+    <div style="margin-top:18px"><span class="stamp">{{ phase_label }} · {{ today }}</span></div>
+  </div>
+</section>
+
+<div class="twocol">
+  <div>
+    <div class="slabel">{{ session }} REGULAR SESSION — {{ 'CLOSED' if closed else 'OPEN' }}</div>
+    <div>
+      {% for e in events %}
+      <div class="calrow"><div class="d">{{ e.date }}</div><div class="e">{{ e.label }}</div></div>
+      {% endfor %}
+    </div>
+
+    <div class="slabel" style="margin-top:34px">WHEN THE LAWS TAKE EFFECT</div>
+    <div>
+      {% for x in effective %}
+      <div class="calrow{{ ' hi' if x.big }}">
+        <div class="d">{{ x.date }}</div>
+        <div class="e">{{ x.n }} law{{ '' if x.n == 1 else 's' }} take{{ 's' if x.n == 1 }} effect
+          {%- if x.big %} — <a href="{{ root }}index.html#bills" style="color:var(--acc)">see the list →</a>{% endif %}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="unverified" style="margin-top:22px">Read from {{ '{:,}'.format(action_count) }}
+      dated actions in the official record, not from a published calendar.
+      Committee weeks that produced no bill action do not appear, and the next
+      session's dates are not set here until its bills exist.</p>
+  </div>
+
+  <aside>
+    <div class="slabel">NOTICES ISSUED, BY SEASON</div>
+    <div class="seasons">
+      {% for s in seasons %}
+      <div class="s">
+        <div class="when">{{ s.when }}</div>
+        <p>{{ s.what }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="ctabox">
+      <p>Subscribe for legislative updates</p>
+      <a class="btn" href="{{ root }}subscribe.html">Subscribe</a>
+    </div>
+  </aside>
+</div>
+{% endblock %}

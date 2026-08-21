@@ -123,7 +123,7 @@ def test_search_index_matches_the_pages_written(built):
     assert len(idx) == 40
     for row in idx:
         assert (out / "bills" / f"{row['n']}.html").exists()
-        assert {"n", "l", "t", "o", "k", "s"} <= set(row)
+        assert {"n", "l", "t", "o", "d", "s"} <= set(row)
 
 
 def test_changes_are_shown_inside_their_sentence(built):
@@ -163,14 +163,14 @@ def test_home_page_tiles_filter_the_bill_list(built):
     from bs4 import BeautifulSoup
     out, _ = built
     soup = BeautifulSoup((out / "index.html").read_text(encoding="utf-8"), "lxml")
-    tiles = soup.select("#tiles .stat")
+    tiles = soup.select("#tiles a[data-outcome]")
     assert tiles, "no filter tiles rendered"
     keys = {t["data-outcome"] for t in tiles}
     assert "all" in keys
     idx = json.loads((out / "search-index.json").read_text())
-    present = {b["k"] for b in idx}
+    present = {b["o"] for b in idx}
     assert (keys - {"all"}) <= present, "a tile filters on an unknown outcome"
-    assert len(soup.select("#tiles .stat.on")) == 1, "exactly one tile starts active"
+    assert len(soup.select("#tiles a.on")) == 1, "exactly one tile starts active"
 
 
 def test_bill_list_renders_without_javascript(built):
@@ -189,8 +189,11 @@ def test_a_bill_page_carries_its_outcome_and_pathway(built):
                 if not p.stem.endswith("-text"))
     soup = BeautifulSoup(page.read_text(encoding="utf-8"), "lxml")
     assert soup.find("h1")
-    assert soup.find(class_="badge"), "outcome badge missing"
-    assert len(soup.select("ol.path li")) == 11, "pathway ladder missing"
+    assert soup.find(class_="stamp"), "outcome stamp missing"
+    # The redesign replaced the eleven-rung stage ladder with a dated
+    # timeline of what actually happened. The stage is still computed and
+    # still shown, as the stamp above -- see stages.py.
+    assert soup.select(".side .trow"), "timeline missing"
     assert "flsenate.gov" in page.read_text(encoding="utf-8"), \
         "every page must link back to the official record"
 
@@ -222,7 +225,7 @@ def test_only_rebuilds_one_bill_over_an_existing_site(built):
     # and the rebuilt page still links only to pages that exist
     soup = BeautifulSoup((out / "bills" / f"{num}.html").read_text(), "html.parser")
     for a in soup.find_all("a", href=True):
-        href = a["href"].split("#")[0]
+        href = a["href"].split("#")[0].split("?")[0]
         if href.startswith(("http", "mailto:")) or not href:
             continue
         assert (out / "bills" / href).resolve().exists(), href
@@ -324,17 +327,18 @@ def test_the_filed_by_row_only_appears_when_it_adds_something(built):
         if page.stem.endswith(SUBPAGES):
             continue
         soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
-        cells = {th.get_text(strip=True): th.find_next("td").get_text(strip=True)
-                 for th in soup.select("div.panel th")}
-        if "Filed by" in cells:
+        cells = {r.select_one(".k").get_text(strip=True):
+                 r.select_one(".v").get_text(" ", strip=True)
+                 for r in soup.select(".factledger .row")}
+        if "FILED BY" in cells:
             # It earns its place either by digging the member out of a
             # committee chain, or by carrying detail the Sponsor row lacks.
-            digs_out = ";" in cells["Sponsor"]
-            adds_detail = "District" in cells["Filed by"]
+            digs_out = ";" in cells["SPONSOR"]
+            adds_detail = "District" in cells["FILED BY"]
             assert digs_out or adds_detail, page
-            assert cells["Filed by"] != cells["Sponsor"], page
+            assert cells["FILED BY"] != cells["SPONSOR"], page
             seen_chain += 1
-        elif "Sponsor" in cells:
+        elif "SPONSOR" in cells:
             seen_plain += 1
     assert seen_chain and seen_plain
 
@@ -345,9 +349,10 @@ def test_the_official_record_shows_the_whole_url(built):
     page = sorted(p for p in (out / "bills").glob("*.html")
                   if not p.stem.endswith(SUBPAGES))[0]
     soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
-    a = soup.select_one("div.panel a.url")
-    assert a and a.get_text(strip=True) == a["href"]
-    assert a["href"].startswith("https://www.flsenate.gov/")
+    a = soup.select_one(".factledger .row:last-child a")
+    assert a and a["href"].startswith("https://www.flsenate.gov/")
+    # the scheme and www are trimmed for reading; the href stays whole
+    assert a.get_text(strip=True) == a["href"].replace("https://www.", "")
 
 
 # --- links off the site ----------------------------------------------------
@@ -381,7 +386,7 @@ def test_a_chapter_pill_without_a_url_is_not_a_link(built):
         if page.stem.endswith(SUBPAGES):
             continue
         soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
-        for a in soup.select("span.pill a"):
+        for a in soup.select(".billhead .meta a"):
             assert a["href"] != "#", page.name
 
 
@@ -395,15 +400,16 @@ def test_a_senate_sponsor_carries_a_link_district_and_party(built):
         if page.stem.endswith(SUBPAGES):
             continue
         soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
-        th = soup.find("th", string="Filed by")
-        if not th:
+        row = next((r for r in soup.select(".factledger .row")
+                    if r.select_one(".k").get_text(strip=True) == "FILED BY"), None)
+        if not row:
             continue
-        a = th.find_next("td").find("a")
+        a = row.select_one("a")
         if not a:
             continue
         assert "/Senators/" in a["href"]
         assert a["target"] == "_blank"
-        text = th.find_next("td").get_text(" ", strip=True)
+        text = row.select_one(".v").get_text(" ", strip=True)
         assert "District" in text, text
         found += 1
     assert found, "no bill rendered a linked sponsor"

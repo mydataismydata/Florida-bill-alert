@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Subscribe · {{ site_name }}{% endblock %}
+{% block description %}Daily alerts and a weekly digest of bills in the Florida Legislature.{% endblock %}
+{% block masthead %}
+<header class="masthead compact">
+  <div class="wordmark"><a href="{{ root }}index.html">SESSION WATCH</a></div>
+  <nav>
+    <a href="{{ root }}index.html">BILLS</a>
+    <a href="{{ root }}calendar.html">CALENDAR</a>
+    <a href="{{ root }}about.html">ABOUT</a>
+    <a href="{{ root }}subscribe.html" class="on">SUBSCRIBE</a>
+    <button type="button" class="theme-toggle" data-theme-toggle>DARK MODE</button>
+  </nav>
+</header>
+{% endblock %}
+{% block body %}
+<section class="pagehead">
+  <div class="overline" style="font:400 10px var(--mono);letter-spacing:.3em;color:var(--ink3)">FORM SW-1 · REQUEST FOR NOTICE</div>
+  <h1>Legislative session subscriptions</h1>
+</section>
+
+<div class="twocol">
+  <form method="post" action="/subscribe" id="subform">
+    <div class="products choose" style="display:grid;grid-template-columns:1fr 1fr">
+      <label class="sel" data-choice>
+        <input type="checkbox" name="daily" value="1" checked><span class="box">✓</span>
+        <span class="t">Daily alerts in session</span>
+        <div class="d">Daily email sent based on your selected areas of interest</div>
+      </label>
+      <label class="sel" data-choice>
+        <input type="checkbox" name="weekly" value="1" checked><span class="box">✓</span>
+        <span class="t">Weekly digest</span>
+        <div class="d">All bills for the latest session, summarized weekly</div>
+      </label>
+    </div>
+
+    <div class="formledger">
+      <div class="frow">
+        <div class="n">1</div><div class="k">EMAIL ADDRESS</div>
+        <div class="f"><input type="email" name="email" id="email" required placeholder="you@example.com"></div>
+      </div>
+      <div class="frow">
+        <div class="n">2</div><div class="k">NAME (OPTIONAL)</div>
+        <div class="f"><input type="text" name="name" placeholder="Optional"></div>
+      </div>
+      <div class="frow">
+        <div class="n">3</div><div class="k">SUBSCRIBING AS (OPTIONAL)</div>
+        <div class="f"><div class="opts">
+          <label><input type="checkbox" name="role" value="legislator_staff"><span class="box">✓</span>Legislator/staff</label>
+          <label><input type="checkbox" name="role" value="citizen"><span class="box">✓</span>Concerned citizen</label>
+        </div></div>
+      </div>
+      <div class="frow">
+        <div class="n">4</div><div class="k">COUNTY (OPTIONAL)</div>
+        <div class="f"><select name="county">
+          <option value="">Select a county</option>
+          {% for c in counties %}<option>{{ c }}</option>{% endfor %}
+        </select></div>
+      </div>
+      <div class="frow">
+        <div class="n">5</div><div class="k">AREAS OF INTEREST</div>
+        <div class="f"><div class="grid3">
+          {% for a in areas %}
+          <label><input type="checkbox" name="areas" value="{{ a.slug }}"><span class="box">✓</span>{{ a.name }}</label>
+          {% endfor %}
+        </div></div>
+      </div>
+    </div>
+
+    <div class="submitrow">
+      <button class="btn" type="submit">Subscribe</button>
+      <p>A confirmation link follows via email.
+         <a href="{{ root }}subscribe.html#manage">Unsubscribe</a> or change your settings any time.</p>
+    </div>
+    <p class="unverified" style="margin-top:22px" id="manage">This form has no
+      destination yet. The subscription service is not built — nothing is stored
+      and no mail is sent.</p>
+  </form>
+
+  <aside>
+    <div class="slabel">SPECIMEN — DAILY ALERT</div>
+    <div class="specimen">
+      <div class="sh">SESSION WATCH · {{ specimen_date }}</div>
+      <div class="subj">{{ specimen|length }} new bills in your areas of interest</div>
+      {% for s in specimen %}
+      <div class="item">
+        <div class="l1"><span class="no">{{ s.label }}</span><span class="ar">{{ s.area|upper }}</span></div>
+        <div class="ti">{{ s.title|truncate(64) }}</div>
+        {% if s.one_line %}<div class="su">{{ s.one_line }}</div>{% endif %}
+      </div>
+      {% endfor %}
+      <div class="sf">MANAGE TOPICS · UNSUBSCRIBE</div>
+    </div>
+  </aside>
+</div>
+
+<script>
+(function () {
+  // The bordered "selected" state follows the checkbox, so it stays right if a
+  // reader navigates back to a half-filled form.
+  function sync() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-choice]'), function (l) {
+      l.className = l.querySelector('input').checked ? 'sel' : '';
+    });
+  }
+  document.getElementById('subform').addEventListener('change', sync);
+  sync();
+  // carried over from the front page or a bill page
+  var q = new URLSearchParams(location.search);
+  if (q.get('email')) document.getElementById('email').value = q.get('email');
+  var area = q.get('area');
+  if (area) {
+    var box = document.querySelector('input[name=areas][value="' + area + '"]');
+    if (box) { box.checked = true; box.closest('label').scrollIntoView({block: 'center'}); }
+  }
+})();
+</script>
+{% endblock %}

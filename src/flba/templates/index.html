@@ -1,124 +1,133 @@
 {% extends "base.html" %}
 {% block title %}{{ site_name }} — {{ session }} session{% endblock %}
 {% block body %}
-<h1>What the Florida Legislature did in {{ session }}</h1>
-<p class="sub">Every bill, how far it got, and exactly which words it changed —
-   read mechanically from the official record.</p>
+
+<section class="hero">
+  <h1>{{ session }} Legislative Session</h1>
+  <div><button type="button" class="picker" data-picker>SESSION: {{ session }} · LATEST <span style="color:var(--ink3)">▾</span></button></div>
+  <p class="tagline">Plain English summaries and analysis of legislative bills</p>
+  {# The form has nowhere to post yet; it carries the address to the
+     subscribe page so nothing is lost between the two. #}
+  <form class="joined" method="get" action="{{ root }}subscribe.html">
+    <input type="email" name="email" placeholder="you@example.com" aria-label="Email address">
+    <button class="btn" type="submit">Get alerts</button>
+  </form>
+  <p class="micro">AD HOC, DAILY OR WEEKLY AUTOMATIC NOTIFICATIONS</p>
+</section>
 
 <div class="stats" id="tiles">
-  <button class="stat" data-outcome="all" data-noun="all bills" type="button">
-    <b>{{ bill_count }}</b><span>bills filed</span></button>
+  <a class="cell{{ ' on' if default_outcome == 'all' }}" href="#bills" data-outcome="all" data-noun="all bills">
+    <div class="n">{{ '{:,}'.format(bill_count) }}</div><div class="k">FILED</div></a>
   {% for o in outcomes %}
-  <button class="stat{{ ' on' if o.key == default_outcome }}" data-outcome="{{ o.key }}"
-          data-noun="{{ o.label }}" type="button">
-    <b>{{ o.n }}</b><span>{{ o.label }}</span></button>
+  <a class="cell{{ ' law' if o.key == 'became_law' }}{{ ' on' if o.key == default_outcome }}"
+     href="#bills" data-outcome="{{ o.key }}" data-noun="{{ o.label }}">
+    <div class="n">{{ '{:,}'.format(o.n) }}</div><div class="k">{{ o.label|upper }}</div></a>
   {% endfor %}
 </div>
 
-<h2>Bills</h2>
-<label for="q" class="meta">Search by number, title, or sponsor — or pick a
-  category above</label>
-<input type="search" id="q" placeholder="e.g. 1452, public records, Gaetz" autocomplete="off">
-<p class="more" id="hint">Showing {{ enacted|length }} bills — became law.</p>
+<section class="wrap" style="padding-top:40px" id="bills">
+  <div class="ledger-head">
+    <h2>The record of bills</h2>
+    <div class="count" id="hint">SHOWING {{ '{:,}'.format(enacted|length) }} — BECAME LAW</div>
+  </div>
+  <div class="controls">
+    <input type="search" id="q" placeholder="Search by number, title, or sponsor" autocomplete="off">
+    <div class="filters" id="filters">
+      {% for o in outcomes %}
+      <a href="#bills" data-outcome="{{ o.key }}"{{ ' class=on'|safe if o.key == default_outcome }}>{{ o.label|upper }}</a>
+      {% endfor %}
+      <a href="#bills" data-outcome="all">ALL</a>
+    </div>
+  </div>
 
-<div class="scroll"><table id="bills">
-<thead><tr><th>Bill</th><th>Title</th><th>Outcome</th></tr></thead>
-<tbody>{% for b in enacted %}
-<tr>
-  <td class="num"><a href="bills/{{ b.num }}.html">{{ b.label }}</a></td>
-  <td>{{ b.title|truncate(88) }}</td>
-  <td>Became law{% if b.chapter_law %} <span class="meta">Ch. {{ b.chapter_law }}</span>{% endif %}</td>
-</tr>{% endfor %}</tbody></table></div>
+  <table class="ledger" id="billtable">
+    <thead><tr><th>NO.</th><th>TITLE</th><th>DISPOSITION</th></tr></thead>
+    <tbody>{% for b in enacted %}
+    <tr>
+      <td class="no"><a href="{{ root }}bills/{{ b.num }}.html">{{ b.label }}</a></td>
+      <td class="title">{{ b.title }}</td>
+      <td class="disp">LAW · {{ b.chapter_law }}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  <div class="more" id="showall"><a href="#bills">SHOW ALL {{ '{:,}'.format(enacted|length) }} →</a></div>
 
-<h2>Most-changed statutes</h2>
-<div class="scroll"><table>
-<thead><tr><th>Statute</th><th>Bills</th><th>Words added</th><th>Words deleted</th></tr></thead>
-<tbody>{% for s in top_statutes %}
-<tr>
-  <td class="num"><a href="statutes/{{ s.statute }}.html">s. {{ s.statute }}</a></td>
-  <td class="num">{{ s.bills }}</td>
-  <td class="num">+{{ s.added }}</td>
-  <td class="num">−{{ s.deleted }}</td>
-</tr>{% endfor %}</tbody></table></div>
-<p class="more"><a href="statutes/index.html">All statutes touched this session →</a></p>
+  <div style="margin:28px 0 0;border-top:1px solid var(--ru2);padding-top:20px">
+    <div style="font:500 10px var(--mono);letter-spacing:.14em;color:var(--ink3)">FILED UNDER</div>
+    <div class="chips">
+      {% for a in areas %}
+      <a class="chip" href="{{ root }}area/{{ a.slug }}.html">{{ a.name }}</a>
+      {% endfor %}
+    </div>
+  </div>
 
+  <div class="products">
+    <div>
+      <div class="no">№ 1 — THE DAILY ALERT</div>
+      <p>Daily updates for every bill in your areas of interest, including bill
+         lifecycle and AI-powered summary and impact.</p>
+    </div>
+    <div>
+      <div class="no">№ 2 — THE WEEKLY DIGEST</div>
+      <p>Weekly, for all new and active bills, summarized by area of interest.</p>
+    </div>
+  </div>
+</section>
+
+<script id="rows" type="application/json">{{ index_rows|tojson }}</script>
 <script>
 (function () {
-  var CAP = 400, DEFAULT = {{ default_outcome|tojson }};
-  var q = document.getElementById('q'), hint = document.getElementById('hint'),
-      body = document.querySelector('#bills tbody'),
-      tiles = document.getElementById('tiles'),
-      data = null, timer = null,
-      state = { q: '', outcome: DEFAULT };
+  // Every bill is in the JSON below; the table starts as the enacted set and
+  // is rebuilt on filter or search. Without JS the enacted table is already
+  // rendered and every row links out, which is the useful default.
+  var CAP = 400,
+      rows = JSON.parse(document.getElementById('rows').textContent),
+      body = document.querySelector('#billtable tbody'),
+      hint = document.getElementById('hint'),
+      q = document.getElementById('q'),
+      showall = document.getElementById('showall'),
+      outcome = {{ default_outcome|tojson }}, noun = 'BECAME LAW', capped = true;
 
-  function load() {
-    return data ? Promise.resolve(data)
-      : fetch('search-index.json').then(function (r) { return r.json(); })
-          .then(function (j) { data = j; return j; });
+  function matches(r) {
+    if (outcome !== 'all' && r.o !== outcome) return false;
+    var t = q.value.trim().toLowerCase();
+    if (!t) return true;
+    return (r.l + ' ' + r.t + ' ' + (r.s || '')).toLowerCase().indexOf(t) >= 0;
   }
-  function esc(s) {
-    return String(s).replace(/[&<>"]/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
-    });
-  }
-  function noun(o) {
-    var t = tiles.querySelector('[data-outcome="' + o + '"]');
-    return t ? t.getAttribute('data-noun') : o;
-  }
-  function draw(rows) {
-    var shown = rows.slice(0, CAP), html = '';
+  function draw() {
+    var hit = rows.filter(matches), shown = capped ? hit.slice(0, CAP) : hit, html = '';
     for (var i = 0; i < shown.length; i++) {
-      var b = shown[i];
-      html += '<tr><td class="num"><a href="bills/' + b.n + '.html">' + esc(b.l) +
-        '</a></td><td>' + esc(b.t) + '</td><td>' + esc(b.o) +
-        (b.c ? ' <span class="meta">Ch. ' + esc(b.c) + '</span>' : '') + '</td></tr>';
+      var r = shown[i];
+      html += '<tr><td class="no"><a href="bills/' + r.n + '.html">' + r.l +
+              '</a></td><td class="title">' + r.t + '</td><td class="disp">' +
+              (r.d || '') + '</td></tr>';
     }
-    body.innerHTML = html;
-
-    var what = noun(state.outcome), match = state.q ? ' matching “' + state.q + '”' : '';
-    if (!rows.length) {
-      hint.textContent = 'No bills' + match + ' in ' + what + '.';
-    } else if (rows.length > shown.length) {
-      hint.textContent = 'Showing ' + CAP + ' of ' + rows.length + ' bills' +
-        match + ' — ' + what + '. Narrow the search to see more.';
-    } else {
-      hint.textContent = 'Showing ' + rows.length + ' bill' +
-        (rows.length === 1 ? '' : 's') + match + ' — ' + what + '.';
-    }
+    body.innerHTML = html || '<tr><td colspan="3" class="title" style="padding:22px 4px;color:var(--ink3)">No bills match.</td></tr>';
+    hint.textContent = 'SHOWING ' + hit.length.toLocaleString() + ' — ' + noun;
+    showall.style.display = (capped && hit.length > CAP) ? '' : 'none';
+    showall.firstChild.textContent = 'SHOW ALL ' + hit.length.toLocaleString() + ' →';
   }
-  function apply() {
-    load().then(function (rows) {
-      draw(rows.filter(function (b) {
-        return (state.outcome === 'all' || b.k === state.outcome) &&
-               (!state.q || b.s.indexOf(state.q) !== -1);
-      }));
+  function pick(el) {
+    outcome = el.getAttribute('data-outcome');
+    noun = (el.getAttribute('data-noun') || el.textContent).trim().toUpperCase();
+    capped = true;
+    Array.prototype.forEach.call(document.querySelectorAll('#filters a'), function (a) {
+      a.className = a.getAttribute('data-outcome') === outcome ? 'on' : '';
     });
+    Array.prototype.forEach.call(document.querySelectorAll('#tiles a'), function (a) {
+      var law = a.getAttribute('data-outcome') === 'became_law';
+      a.className = 'cell' + (law ? ' law' : '') +
+                    (a.getAttribute('data-outcome') === outcome ? ' on' : '');
+    });
+    draw();
   }
-  function select(outcome, push) {
-    state.outcome = outcome;
-    var all = tiles.querySelectorAll('.stat');
-    for (var i = 0; i < all.length; i++) {
-      all[i].classList.toggle('on', all[i].getAttribute('data-outcome') === outcome);
-    }
-    if (push) {
-      history.replaceState(null, '', outcome === DEFAULT ? location.pathname : '#' + outcome);
-    }
-    apply();
-  }
-
-  tiles.addEventListener('click', function (e) {
-    var btn = e.target.closest('.stat');
-    if (btn) select(btn.getAttribute('data-outcome'), true);
+  document.getElementById('tiles').addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-outcome]'); if (a) pick(a);
   });
-  q.addEventListener('input', function () {
-    clearTimeout(timer);
-    timer = setTimeout(function () { state.q = q.value.trim().toLowerCase(); apply(); }, 120);
+  document.getElementById('filters').addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-outcome]'); if (a) pick(a);
   });
-
-  var fromHash = location.hash.replace('#', '');
-  if (fromHash && tiles.querySelector('[data-outcome="' + fromHash + '"]')) {
-    select(fromHash, false);
-  }
+  showall.addEventListener('click', function (e) { e.preventDefault(); capped = false; draw(); });
+  q.addEventListener('input', function () { capped = true; draw(); });
 })();
 </script>
 {% endblock %}

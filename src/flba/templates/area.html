@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ area }} · {{ site_name }}{% endblock %}
+{% block description %}Bills in the Florida Legislature filed under {{ area }}.{% endblock %}
+{% block masthead %}
+<header class="masthead compact">
+  <div class="wordmark"><a href="{{ root }}index.html">SESSION WATCH</a></div>
+  <nav>
+    <a href="{{ root }}index.html" class="on">BILLS</a>
+    <a href="{{ root }}calendar.html">CALENDAR</a>
+    <a href="{{ root }}about.html">ABOUT</a>
+    <a href="{{ root }}subscribe.html">SUBSCRIBE</a>
+    <button type="button" class="theme-toggle" data-theme-toggle>DARK MODE</button>
+  </nav>
+</header>
+{% endblock %}
+{% block body %}
+<section class="pagehead">
+  <div style="font:400 10px var(--mono);letter-spacing:.3em;color:var(--ink3)">FILED UNDER</div>
+  <h1>{{ area }}</h1>
+</section>
+
+<section class="wrap" style="padding-top:24px">
+  <div class="areastrip" style="margin-top:0">
+    <p>{{ '{:,}'.format(rows|length) }} bill{{ '' if rows|length == 1 else 's' }} in
+       the {{ session }} session — subscribe to see new ones the day they're filed.</p>
+    <a class="btn" href="{{ root }}subscribe.html?area={{ area_slug }}">Get alerts</a>
+  </div>
+
+  <table class="ledger">
+    <thead><tr><th>NO.</th><th>TITLE</th><th>DISPOSITION</th></tr></thead>
+    <tbody>{% for b in rows %}
+    <tr>
+      <td class="no"><a href="{{ root }}bills/{{ b.num }}.html">{{ b.label }}</a></td>
+      <td class="title">{{ b.title }}</td>
+      <td class="disp">{{ b.disposition }}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+
+  <div style="margin:28px 0 0;border-top:1px solid var(--ru2);padding-top:20px">
+    <div style="font:500 10px var(--mono);letter-spacing:.14em;color:var(--ink3)">OTHER AREAS</div>
+    <div class="chips">
+      {% for a in areas %}
+      <a class="chip{{ ' on' if a.slug == area_slug }}" href="{{ root }}area/{{ a.slug }}.html">{{ a.name }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

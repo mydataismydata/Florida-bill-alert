@@ -18,8 +18,17 @@ from .verify import Verifier, is_degenerate, verify_claims
 _CITE_PREFIX = re.compile(r"^\s*(?:ss?\.|section)\s*", re.I)
 
 
+# The model likes to annotate the field -- "493.6102(16) (new) - 28 words
+# added, 0 deleted" -- and a maxLength generous enough not to truncate a real
+# citation is generous enough to let that through. A citation is a number,
+# optional subsections, and nothing else.
+_CITE_ONLY = re.compile(r"^\s*\d+[A-Za-z]?\.[\w.]*\d[\w.]*(?:\([^)]{1,8}\))*")
+
+
 def tidy_statute(cite: str) -> str:
-    return _CITE_PREFIX.sub("", cite or "").strip().rstrip(".")
+    bare = _CITE_PREFIX.sub("", cite or "").strip()
+    m = _CITE_ONLY.match(bare)
+    return (m.group(0) if m else bare).strip().rstrip(".")
 
 KIND_NAMES = {0: "plain", 1: "insert", 2: "delete"}
 
