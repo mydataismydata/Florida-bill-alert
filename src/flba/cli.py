@@ -530,6 +530,30 @@ def cmd_statutes(args) -> int:
     return 0
 
 
+def cmd_digest(args) -> int:
+    """Write the email payloads the public server will send."""
+    from datetime import date
+
+    from .digest import build
+
+    store = Store(DATA / "index.sqlite")
+    out = Path(args.out) if args.out else ROOT / "site" / "mail"
+    today = date.fromisoformat(args.date) if args.date else date.today()
+
+    made = 0
+    for product in (["daily", "weekly"] if args.product == "both" else [args.product]):
+        doc = build(store.db, args.session, out, product, today=today, days=args.days)
+        if doc is None:
+            print(f"  {product}: nothing in the window — not written")
+            continue
+        print(f"  {product}: {len(doc['bills'])} bills -> {doc['path']}")
+        made += 1
+    if not made:
+        print("\nnothing to send. An empty digest is not written; a newsletter that "
+              "reports nothing teaches people to ignore it.")
+    return 0
+
+
 def cmd_reverify(args) -> int:
     """Re-check stored quotes against the current verifier.
 
@@ -827,7 +851,7 @@ def main(argv=None) -> int:
                      ("crossref", cmd_crossref), ("statutes", cmd_statutes),
                      ("analyze", cmd_analyze), ("build", cmd_build),
                      ("members", cmd_members), ("reverify", cmd_reverify),
-                     ("status", cmd_status)):
+                     ("digest", cmd_digest), ("status", cmd_status)):
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
         sp.add_argument("--refresh", action="store_true",
@@ -873,6 +897,13 @@ def main(argv=None) -> int:
             sp.add_argument("--model",
                             default="mlx-community/Qwen3.8-27B-4bit")
             sp.add_argument("--api-key", default=None)
+        if name == "digest":
+            sp.add_argument("--product", default="both",
+                            choices=["daily", "weekly", "both"])
+            sp.add_argument("--date", help="pretend today is this ISO date")
+            sp.add_argument("--days", type=int,
+                            help="window in days (default 1 daily, 7 weekly)")
+            sp.add_argument("--out", help="output directory (default site/mail)")
         if name == "build":
             sp.add_argument("--out", help="output directory (default ./site)")
             sp.add_argument("--limit", type=int, default=0)

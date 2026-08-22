@@ -53,6 +53,25 @@ def _rows(db, sql, *args):
     return db.execute(sql, args).fetchall()
 
 
+def _copy_endpoints(out: Path) -> None:
+    """Ship the subscribe endpoints with the bundle.
+
+    They travel in the same tree as the HTML so one deploy moves both and
+    --delete cannot strip them. config.php is not among them: it holds the
+    database password and is uploaded once, by hand, and never rebuilt.
+    """
+    src = HERE.parent.parent / "public"
+    if not src.is_dir():
+        return
+    # config.php holds the database password. config.example.php and schema.sql
+    # are for whoever sets the server up, and a web root would serve schema.sql
+    # as a plain file to anyone who asked.
+    skip = {"config.php", "config.example.php"}
+    for php in sorted(src.glob("*.php")):
+        if php.name not in skip:
+            shutil.copy(php, out / php.name)
+
+
 # House committees carry the word in their name; Senate ones do not -- "Rules"
 # and "Judiciary" are committees, and so are "Martin" and "McClain" as far as
 # any pattern can tell. So the Senate names are matched against the vocabulary
@@ -435,6 +454,7 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         **common), encoding="utf-8")
 
     shutil.copy(HERE / "static" / "style.css", out / "style.css")
+    _copy_endpoints(out)
 
 
     files = sum(1 for _ in out.rglob("*") if _.is_file())

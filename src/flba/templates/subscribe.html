@@ -20,7 +20,7 @@
 </section>
 
 <div class="twocol">
-  <form method="post" action="/subscribe" id="subform">
+  <form method="post" action="{{ root }}subscribe.php" id="subform">
     <div class="products choose" style="display:grid;grid-template-columns:1fr 1fr">
       <label class="sel" data-choice>
         <input type="checkbox" name="daily" value="1" checked><span class="box">✓</span>
@@ -72,9 +72,9 @@
       <p>A confirmation link follows via email.
          <a href="{{ root }}subscribe.html#manage">Unsubscribe</a> or change your settings any time.</p>
     </div>
-    <p class="unverified" style="margin-top:22px" id="manage">This form has no
-      destination yet. The subscription service is not built — nothing is stored
-      and no mail is sent.</p>
+    <p class="unverified" style="margin-top:22px" id="manage">Double opt-in:
+      nothing is sent until you follow the confirmation link. Every email carries
+      a one-click unsubscribe, and your address is never passed on.</p>
   </form>
 
   <aside>

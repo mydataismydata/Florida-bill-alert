@@ -77,7 +77,15 @@
         <h2>Plain English Summary</h2>
         <span class="tag">{{ 'AI-GENERATED' if ai else 'NOT YET RUN' }}</span>
         {% if not ai %}
-        <a class="btn" href="{{ root }}subscribe.html?request={{ b.num }}">Request AI analysis</a>
+        {# Writes a row on the public server. The analysis box pulls it on its
+           next run -- there is no path from here inward. #}
+        <form method="post" action="{{ root }}request-analysis.php" class="inline">
+          <input type="hidden" name="session" value="{{ session }}">
+          <input type="hidden" name="num" value="{{ b.num }}">
+          <input type="email" name="email" placeholder="you@example.com (optional)"
+                 aria-label="Email address for the result">
+          <button class="btn" type="submit">Request AI analysis</button>
+        </form>
         {% endif %}
       </header>
       <div class="inner">

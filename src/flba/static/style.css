@@ -473,3 +473,9 @@ p.billtext a { color: var(--acc); }
 .prose ul { margin: 0 0 14px; padding-left: 20px; }
 .prose li { margin: 0 0 9px; font-size: 15.5px; line-height: 1.7; color: var(--ink2); }
 .prose li::marker { color: var(--ink3); }
+
+/* the request form in the analysis header */
+form.inline { margin-left: auto; display: flex; gap: 8px; align-items: center;
+  flex-wrap: wrap; }
+form.inline input { font-size: 12px; padding: 8px 10px; min-width: 15rem; }
+form.inline .btn { padding: 8px 14px; font-size: 10px; letter-spacing: .14em; }
