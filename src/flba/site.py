@@ -425,9 +425,11 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         specimen_date=today.strftime("%a %b %-d").upper(), **common),
         encoding="utf-8")
 
+    analysed = db.execute(
+        "SELECT COUNT(*) n FROM analysis_ai WHERE session=?", (session,)).fetchone()["n"]
     (out / "about.html").write_text(env.get_template("about.html").render(
-        root="", superseded=outcomes.get("superseded", 0), **common),
-        encoding="utf-8")
+        root="", superseded=outcomes.get("superseded", 0), analysed=analysed,
+        **common), encoding="utf-8")
 
     shutil.copy(HERE / "static" / "style.css", out / "style.css")
 

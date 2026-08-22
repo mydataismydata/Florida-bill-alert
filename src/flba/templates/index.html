@@ -5,14 +5,6 @@
 <section class="hero">
   <h1>{{ session }} Legislative Session</h1>
   <div><button type="button" class="picker" data-picker>SESSION: {{ session }} · LATEST <span style="color:var(--ink3)">▾</span></button></div>
-  <p class="tagline">Plain English summaries and analyses of legislative bills</p>
-  {# The form has nowhere to post yet; it carries the address to the
-     subscribe page so nothing is lost between the two. #}
-  <form class="joined" method="get" action="{{ root }}subscribe.html">
-    <input type="email" name="email" placeholder="you@example.com" aria-label="Email address">
-    <button class="btn" type="submit">Get alerts</button>
-  </form>
-  <p class="micro">AD HOC, DAILY OR WEEKLY AUTOMATIC NOTIFICATIONS</p>
 </section>
 
 <div class="stats" id="tiles">

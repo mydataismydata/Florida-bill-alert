@@ -145,7 +145,7 @@ input:focus, select:focus { border-color: var(--acc); }
 .chip.on { border-color: var(--acc); color: var(--acc); }
 
 /* ------------------------------------------------------------------ hero */
-.hero { padding: 52px var(--pad) 44px; text-align: center;
+.hero { padding: 46px var(--pad) 38px; text-align: center;
   border-bottom: 1px solid var(--ru2); }
 .hero h1 { margin: 0 auto; font-size: 36px; line-height: 1.2; max-width: 760px; }
 .hero .tagline { margin: 16px auto 0; font-size: 16.5px; line-height: 1.6;
@@ -462,3 +462,14 @@ input[type="checkbox"]:focus-visible + .box { outline: 2px solid var(--acc); }
 /* Sits with the Legislature's summary, not as a section of its own. */
 p.billtext { margin: 10px 0 0; font: 500 13px var(--mono); letter-spacing: .06em; }
 p.billtext a { color: var(--acc); }
+
+/* ============================================================ prose pages */
+.prose { padding: 26px var(--pad) 52px; max-width: 56rem; }
+.prose .slabel { margin: 34px 0 14px; }
+.prose .slabel:first-child { margin-top: 0; }
+.prose p { margin: 0 0 14px; font-size: 15.5px; line-height: 1.7; color: var(--ink2); }
+.prose p strong, .prose li strong { color: var(--ink); font-weight: 700; }
+.prose a { color: var(--acc); }
+.prose ul { margin: 0 0 14px; padding-left: 20px; }
+.prose li { margin: 0 0 9px; font-size: 15.5px; line-height: 1.7; color: var(--ink2); }
+.prose li::marker { color: var(--ink3); }
