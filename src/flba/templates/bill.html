@@ -66,16 +66,10 @@
     <p class="provided">{{ b.long_title }}</p>
     {% endif %}
 
-    {# The bill's own words come before anyone's reading of them, so this sits
-       above the analysis rather than in the margin beside it. #}
+    {# Part of the summary block, not a section of its own: the Legislature's
+       description of the bill, then the bill. #}
     {% if has_text %}
-    <a class="billtext" href="{{ root }}bills/{{ b.num }}-text.html">
-      <span class="lede">Full bill text</span>
-      {%- if stats.words_inserted or stats.words_deleted %}
-      <span class="sub">{{ '{:,}'.format(stats.words_inserted) }} words added
-        and {{ '{:,}'.format(stats.words_deleted) }} deleted</span>
-      {%- endif %}
-    </a>
+    <p class="billtext"><a href="{{ root }}bills/{{ b.num }}-text.html">Full bill text →</a></p>
     {% endif %}
 
     <section class="aibox">

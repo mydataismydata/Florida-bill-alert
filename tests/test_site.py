@@ -479,7 +479,7 @@ def test_a_bill_with_text_always_links_to_it(built):
             continue
         checked += 1
         soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
-        link = soup.select_one("a.billtext")
+        link = soup.select_one("p.billtext a")
         assert link, page.name
         assert link["href"].endswith(f"{page.stem}-text.html")
         # the bill's own words come before anyone's reading of them
