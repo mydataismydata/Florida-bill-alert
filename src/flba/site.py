@@ -29,7 +29,10 @@ HERE = Path(__file__).resolve().parent
 SITE_NAME = "Session Watch"
 REPO = "https://github.com/mydataismydata/Florida-bill-alert"
 MAX_BLOCKS = 12           # changed passages on the summary page
-SHOWN_PROVISIONS = 2      # the rest are behind "N more provisions"
+# Key provisions are the point of the page, so they are shown. The fold
+# only exists for a bill long enough that the list stops being readable,
+# and with the schema capped at 8 provisions nothing reaches it today.
+SHOWN_PROVISIONS = 10
 
 # Florida's 67, for the subscribe form's optional county field.
 COUNTIES = ['Alachua', 'Baker', 'Bay', 'Bradford', 'Brevard', 'Broward', 'Calhoun', 'Charlotte', 'Citrus', 'Clay', 'Collier', 'Columbia', 'DeSoto', 'Dixie', 'Duval', 'Escambia', 'Flagler', 'Franklin', 'Gadsden', 'Gilchrist', 'Glades', 'Gulf', 'Hamilton', 'Hardee', 'Hendry', 'Hernando', 'Highlands', 'Hillsborough', 'Holmes', 'Indian River', 'Jackson', 'Jefferson', 'Lafayette', 'Lake', 'Lee', 'Leon', 'Levy', 'Liberty', 'Madison', 'Manatee', 'Marion', 'Martin', 'Miami-Dade', 'Monroe', 'Nassau', 'Okaloosa', 'Okeechobee', 'Orange', 'Osceola', 'Palm Beach', 'Pasco', 'Pinellas', 'Polk', 'Putnam', 'St. Johns', 'St. Lucie', 'Santa Rosa', 'Sarasota', 'Seminole', 'Sumter', 'Suwannee', 'Taylor', 'Union', 'Volusia', 'Wakulla', 'Walton', 'Washington']
