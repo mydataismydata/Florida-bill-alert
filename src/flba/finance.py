@@ -54,12 +54,21 @@ _HONORIFIC = re.compile(r"^(?:Dr|Mr|Mrs|Ms|Rev|Hon)\.?\s+", re.I)
 _NICKNAME = re.compile(r'"([^"]*)"')
 _INITIAL = re.compile(r"^[A-Z]\.?$")
 _COMMITTEE = re.compile(r"Committee|Subcommittee|Council|Caucus|Delegation", re.I)
+# How a candidate's filing is named: "Young, Ra'Shon  (DEM)(STR)".
+_FILED_AS = re.compile(
+    r"^(?P<last>[^,]+),\s*(?P<given>.*?)\s*\([A-Z]{3}\)\([A-Z]{3}\)\s*$")
 
 
 def fold(text: str) -> str:
     """Drop accents. The state's filings are plain ASCII: Valdés is VALDES."""
     return "".join(c for c in unicodedata.normalize("NFKD", text)
                    if not unicodedata.combining(c))
+
+
+def squash(text: str) -> str:
+    """Letters and digits only, lowercased -- for comparing two spellings of
+    one name. Ra'Shon and RaShon are the same person; J.J. and JJ are too."""
+    return "".join(c for c in fold(text).lower() if c.isalnum())
 
 
 def parse_name(raw: str) -> tuple[str, list[str]]:
@@ -196,6 +205,18 @@ class Tracker:
                 time.sleep(2 ** attempt)
         raise TrackerError(f"{url} -> gave up after 3 attempts ({why})")
 
+    def _result(self, person: dict) -> dict:
+        return {
+            "name": person["name"],
+            "last": person["last"],
+            "first": person["first"],
+            "url": self.person_url(person["last"], person["first"]),
+            "total_received": person.get("totalReceived") or "0",
+            "total_given": person.get("totalGiven") or "0",
+            "filings": len(person.get("parts") or []),
+            "same_surname": len(person.get("sameSurname") or []),
+        }
+
     def resolve(self, name: str) -> dict | None:
         """Find the filings for a roster name, trying each spelling in turn.
 
@@ -209,19 +230,47 @@ class Tracker:
             for form in surname_forms(surname):
                 for spelling in dict.fromkeys([given, fold(given)]):
                     found = self.lookup(form, spelling)
-                    if not found:
-                        continue
-                    person = found["person"]
-                    return {
-                        "name": person["name"],
-                        "last": person["last"],
-                        "first": person["first"],
-                        "url": self.person_url(person["last"], person["first"]),
-                        "total_received": person.get("totalReceived") or "0",
-                        "total_given": person.get("totalGiven") or "0",
-                        "filings": len(person.get("parts") or []),
-                        "same_surname": len(person.get("sameSurname") or []),
-                    }
+                    if found:
+                        return self._result(found["person"])
+        for given in givens:
+            found = self.by_prefix(surname, given)
+            if found:
+                return found
+        return None
+
+    def by_prefix(self, surname: str, given: str) -> dict | None:
+        """Last resort for a name PAC Tracker spells with punctuation.
+
+        A filing under `Ra'Shon` cannot be reached by asking for `RaShon`, and
+        one under `J.J.` cannot be reached by asking for `J.J.` either -- a dot
+        in the path is not routed. What does work is a prefix, because the
+        matcher accepts one.
+
+        A prefix on its own is not safe: asking for Smith and `a` returns
+        Kathleen A. Smith, matched on her middle initial. So every hit here is
+        checked against the name it came back with, ignoring punctuation, and
+        anything that is not the same name is refused. That check is what makes
+        a two-letter query acceptable.
+        """
+        want = squash(given)
+        if len(want) < 2:                   # a single letter names nobody
+            return None
+        for form in surname_forms(surname):
+            # Down to one letter: it is the answer that gets verified, not the
+            # question, so a short query costs nothing but a round trip.
+            for size in range(len(want) - 1, 0, -1):
+                found = self.lookup(form, want[:size])
+                if not found:
+                    continue
+                person = found["person"]
+                filed = {(squash(m.group("last")), squash(m.group("given")))
+                         for m in (_FILED_AS.match(p["name"] or "")
+                                   for p in person.get("parts") or []
+                                   if p.get("kind") == "candidate")
+                         if m}
+                if filed == {(squash(form), want)}:
+                    return self._result(person)
+                return None                 # a hit, but it is someone else
         return None
 
 

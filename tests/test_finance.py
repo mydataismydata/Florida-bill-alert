@@ -14,9 +14,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from flba.finance import (display_name, fold, match, parse_name,  # noqa: E402
-                          roster_index, sponsor_names, split_token,
-                          surname_forms)
+from flba.finance import (Tracker, display_name, fold, match,  # noqa: E402
+                          parse_name, roster_index, sponsor_names, squash,
+                          split_token, surname_forms)
 
 DB = ROOT / "data" / "index.sqlite"
 
@@ -100,6 +100,74 @@ def test_a_plain_surname_is_asked_about_once():
 ])
 def test_display_name_keeps_the_chambers_spelling(raw, shown):
     assert display_name(raw) == shown
+
+
+class FakeTracker(Tracker):
+    """A Tracker answering from a fixture, so the prefix rules can be tested
+    without reaching the network."""
+
+    def __init__(self, filings):
+        super().__init__(base="http://x", public="http://x")
+        self.filings = filings
+        self.asked = []
+
+    def lookup(self, surname, given):
+        self.asked.append((surname.lower(), given.lower()))
+        parts = [p for last, first, p in self.filings
+                 if last == surname.lower() and first.startswith(given.lower())]
+        if not parts:
+            return None
+        return {"person": {"name": "x", "last": surname.lower(),
+                           "first": given.lower(), "parts": parts,
+                           "totalReceived": "1", "totalGiven": "0"}}
+
+
+def test_a_name_with_punctuation_is_reached_by_prefix():
+    """Ra'Shon is not reachable as RaShon, and a dot in a path is not routed.
+
+    A prefix is, so that is the way in -- see the refusal test below for what
+    stops it linking the wrong person.
+    """
+    t = FakeTracker([
+        ("young", "ra'shon", {"kind": "candidate", "name": "Young, Ra'Shon  (DEM)(STR)"}),
+        ("grow", "j.j.", {"kind": "candidate", "name": "Grow, J.J.  (REP)(STR)"}),
+    ])
+    assert t.by_prefix("Young", "RaShon")["url"].endswith("/young/ra")
+    assert t.by_prefix("Grow", "J.J.")["url"].endswith("/grow/j")
+
+
+def test_a_prefix_that_lands_on_someone_else_is_refused():
+    """Asking PAC Tracker for Smith and 'a' returns Kathleen A. Smith, matched
+    on her middle initial. The answer is checked, so this cannot become a
+    link."""
+    t = FakeTracker([
+        ("smith", "kathleen a.", {"kind": "candidate",
+                                  "name": "Smith, Kathleen A. (REP)(PUB)"}),
+    ])
+    assert t.by_prefix("Smith", "Aaron") is None
+    assert t.by_prefix("Smith", "Alan") is None
+
+
+def test_a_prefix_matching_two_people_is_refused():
+    """One link cannot stand for two people, however alike their names."""
+    t = FakeTracker([
+        ("hall", "jonathan", {"kind": "candidate", "name": "Hall, Jonathan (REP)(STR)"}),
+        ("hall", "jonquil", {"kind": "candidate", "name": "Hall, Jonquil (DEM)(STR)"}),
+    ])
+    assert t.by_prefix("Hall", "Jon") is None
+
+
+def test_a_single_letter_name_is_never_guessed_at():
+    t = FakeTracker([("x", "a", {"kind": "candidate", "name": "X, A (REP)(STR)"})])
+    assert t.by_prefix("X", "A") is None
+    assert not t.asked, "should not have asked at all"
+
+
+def test_squash_ignores_only_punctuation_and_case():
+    assert squash("Ra'Shon") == squash("RaShon") == "rashon"
+    assert squash("J.J.") == squash("JJ") == "jj"
+    assert squash("Valdés") == "valdes"
+    assert squash("Anne") != squash("Ann")
 
 
 def test_committees_are_not_people():
