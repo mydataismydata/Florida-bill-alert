@@ -46,11 +46,34 @@ def _env() -> Environment:
         loader=FileSystemLoader(str(HERE / "templates")),
         autoescape=select_autoescape(["html"]),
         trim_blocks=True, lstrip_blocks=True)
+    env.filters["money"] = money
     return env
+
+
+def money(amount) -> str:
+    """A dollar figure at the precision a reader can hold in their head.
+
+    Campaign totals span four orders of magnitude across one session's
+    sponsors, and the cents in a filing are noise at every one of them.
+    """
+    try:
+        value = float(amount or 0)
+    except (TypeError, ValueError):
+        return ""
+    if value >= 1_000_000:
+        return f"${value / 1_000_000:.1f}M"
+    if value >= 1_000:
+        return f"${value / 1_000:.0f}k"
+    return f"${value:,.0f}"
 
 
 def _rows(db, sql, *args):
     return db.execute(sql, args).fetchall()
+
+
+def _has_table(db, name: str) -> bool:
+    return bool(db.execute("SELECT 1 FROM sqlite_master"
+                           " WHERE type='table' AND name=?", (name,)).fetchone())
 
 
 def _copy_endpoints(out: Path) -> None:
@@ -200,6 +223,16 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     members_by_url = {r["url"]: dict(r) for r in
                       _rows(db, "SELECT * FROM member")}
 
+    # Campaign filings, matched by `flba finance` before the build. Rows with
+    # no url were checked and came back empty; they stay out so the template
+    # shows nothing rather than a dead link. A corpus ingested before this
+    # existed has no table at all, and that must not stop a build.
+    funding = {}
+    if _has_table(db, "sponsor_finance"):
+        funding = {(r["chamber"], r["token"]): dict(r) for r in
+                   _rows(db, "SELECT * FROM sponsor_finance"
+                             " WHERE session=? AND url<>''", session)}
+
     history: dict[int, list] = {}
     for r in _rows(db, "SELECT num,date,chamber,action FROM history"
                        " WHERE session=? ORDER BY num,seq", session):
@@ -280,10 +313,17 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         area = classify([r["statute"] for r in refs], b["title"] or "")
         _panels, members = split_sponsor(b["sponsor"] or "", committees)
         member = members_by_url.get(b["sponsor_url"] or "")
+        # The sponsor line keeps the chamber's own wording and order; the
+        # donations link is added to the parts that name a person.
+        sponsor_parts = [
+            dict(funding.get((b["chamber"], part)) or {}, name=part)
+            for part in (p.strip() for p in (b["sponsor"] or "").split(";"))
+            if part]
         html = env.get_template("bill.html").render(
             root="../", b=b, p=prog, path=pathway(prog), refs=refs,
             members=members, sponsor_has_committees=bool(_panels),
-            member=member, area=area, area_slug=slug(area),
+            member=member, sponsor_parts=sponsor_parts,
+            area=area, area_slug=slug(area),
             shown_provisions=SHOWN_PROVISIONS,
             blocks=blocks, total_blocks=len(all_blocks),
             has_text=loaded is not None,

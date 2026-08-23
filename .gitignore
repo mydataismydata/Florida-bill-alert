@@ -7,3 +7,4 @@ site/
 
 # server-side only: holds the database password
 public/config.php
+.working/

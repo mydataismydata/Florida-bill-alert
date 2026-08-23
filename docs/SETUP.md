@@ -229,8 +229,48 @@ off each. The district is already in the URL the bill page carries.
 **Senate only.** flsenate.gov publishes a page per senator and links to it from
 every Senate bill. House sponsors appear on the same site as a bare surname
 with no link and nothing behind it, so a House bill names its member and stops
-there. Covering the House would mean adding myfloridahouse.gov as a second
-source; nothing else in the project reads from it today.
+there. The House's own roster fills that gap -- see Campaign finance below.
 
 Re-run the command when the chamber changes -- membership, party or district.
 It is cheap and the raw pages are cached.
+
+## Campaign finance
+
+Each sponsor on a bill page carries a `[search donations]` link through to
+their filings in PAC Tracker.
+
+```bash
+flba --session 2026 members     # senators, if not already stored
+flba --session 2026 finance
+```
+
+That reads the House roster from flhouse.gov, turns every sponsor surname back
+into a named member, and asks PAC Tracker what they have raised. Results are
+stored, so `build` needs no network and the published site calls nothing.
+
+Two rules keep a link from naming the wrong person:
+
+- **A surname is never enough.** 558 people have filed for a House seat and six
+  of them filed as Smith. Every match carries a given name, taken from the
+  chamber's roster.
+- **Anything still ambiguous gets no link.** Two sitting members share a
+  surname with no initial to separate them, or a name matches nothing: the
+  page shows the sponsor with no link rather than a plausible wrong one.
+
+In the 2026 session that resolves 145 of 151 sponsors. The other six have no
+aggregated filing in PAC Tracker -- they appear as donors but never filed as a
+candidate or committee -- which reads as a 404 and is stored as "no link".
+
+To develop against a local PAC Tracker while still publishing public links:
+
+```bash
+flba --session 2026 finance --base-url http://localhost:3111
+```
+
+`--base-url` is where the answers come from; `--public-url` is where readers
+are sent, and it defaults to the public host either way.
+
+**These links depend on PAC Tracker's `/person/` route being deployed.** It
+serves on a local instance today but returns 404 on pactrack.sjcrlc.org, so the
+links are correct but dead until that release ships. Nothing needs changing
+here when it does.

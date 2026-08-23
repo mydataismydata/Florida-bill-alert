@@ -251,6 +251,8 @@ footer.site a { color: var(--acc2); }
   color: var(--ink3); padding-top: 3px; }
 .factledger .v { font-size: 15px; word-break: break-word; }
 .factledger .v a { color: var(--acc); }
+.factledger a.donations { font: 500 11px var(--mono); letter-spacing: .04em;
+  white-space: nowrap; }
 
 /* subscribe-to-this-area strip */
 .areastrip { display: flex; align-items: center; justify-content: space-between;

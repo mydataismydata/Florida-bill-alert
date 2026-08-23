@@ -108,6 +108,22 @@ CREATE TABLE IF NOT EXISTS member (
     PRIMARY KEY (chamber, district)
 );
 
+-- One row per sponsor name as the Legislature writes it, so the site can
+-- look up a link without re-running the match. Keyed on the raw token
+-- because that is what a bill actually carries: districts are not unique in
+-- the House, where seven seats changed hands mid-session.
+CREATE TABLE IF NOT EXISTS sponsor_finance (
+    session TEXT, chamber TEXT, token TEXT,
+    member_name TEXT,       -- as the chamber's roster writes it
+    district INTEGER, party TEXT,
+    person_name TEXT,       -- as the filings write it, '' when unmatched
+    url TEXT,               -- '' when there is no filing to link to
+    total_received TEXT, total_given TEXT,
+    filings INTEGER, same_surname INTEGER,
+    checked_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (session, chamber, token)
+);
+
 CREATE TABLE IF NOT EXISTS bill_render (
     session TEXT, num INTEGER, version TEXT,
     fmt TEXT, nsegments INTEGER, nchars INTEGER,
@@ -232,6 +248,25 @@ class Store:
         self.db.execute(
             "INSERT OR REPLACE INTO member (chamber,district,name,party,url)"
             " VALUES (?,?,?,?,?)", (chamber, district, name, party, url))
+        self.db.execute("COMMIT")
+
+    def save_sponsor_finance(self, session, chamber, token, rec) -> None:
+        """Record what a sponsor token resolved to, including a miss.
+
+        A miss is stored rather than skipped so a rebuild does not ask PAC
+        Tracker the same unanswerable question again.
+        """
+        self.db.execute("BEGIN IMMEDIATE")
+        self.db.execute(
+            "INSERT OR REPLACE INTO sponsor_finance"
+            " (session,chamber,token,member_name,district,party,person_name,"
+            "  url,total_received,total_given,filings,same_surname,checked_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
+            (session, chamber, token, rec.get("member_name", ""),
+             rec.get("district"), rec.get("party", ""),
+             rec.get("person_name", ""), rec.get("url", ""),
+             rec.get("total_received", ""), rec.get("total_given", ""),
+             rec.get("filings", 0), rec.get("same_surname", 0)))
         self.db.execute("COMMIT")
 
     def save_render(self, session, num, version, fmt, segments) -> None:

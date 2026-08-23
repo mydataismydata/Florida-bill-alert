@@ -37,7 +37,13 @@
   </div>
 
   <div class="factledger">
-    {% if b.sponsor %}<div class="row"><div class="k">SPONSOR</div><div class="v">{{ b.sponsor }}</div></div>{% endif %}
+    {% if sponsor_parts %}<div class="row"><div class="k">SPONSOR</div><div class="v">
+      {%- for s in sponsor_parts %}{% if not loop.first %}; {% endif %}{{ s.name }}
+        {%- if s.url %} <a class="donations" href="{{ s.url }}" target="_blank"
+          rel="noopener"
+          title="Campaign filings for {{ s.member_name }}">[search donations]</a>
+        {%- endif %}
+      {%- endfor %}</div></div>{% endif %}
     {% if members and (sponsor_has_committees or member) %}
     <div class="row"><div class="k">FILED BY</div><div class="v">
       {%- if member %}<a href="{{ member.url }}" target="_blank" rel="noopener">{{ member.name or members|join('; ') }}</a> — District {{ member.district }}, {{ member.party }}

@@ -20,6 +20,7 @@ from .store import Store
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
+PACTRACK = "https://pactrack.sjcrlc.org"
 
 
 def _paths(session: str):
@@ -675,6 +676,84 @@ def cmd_members(args) -> int:
     return 0
 
 
+def cmd_finance(args) -> int:
+    """Match every sponsor to their campaign filings, once, before a build.
+
+    Runs here rather than on the public server: the site ships the finished
+    links and the server never calls anything.
+    """
+    from .finance import (Tracker, display_name, match, roster_index,
+                          sponsor_names)
+    from .sources.flhouse import ROSTER, parse_roster
+
+    store = Store(DATA / "index.sqlite")
+    fetcher = PoliteFetcher(DATA / "raw")
+    tracker = Tracker(base=args.base_url, public=args.public_url)
+
+    r = fetcher.fetch(ROSTER, force=args.refresh)
+    if not r.ok:
+        print(f"house roster -> HTTP {r.status}")
+        return 1
+    house = parse_roster(r.text())
+    senators = {row["url"]: dict(row) for row in store.db.execute(
+        "SELECT name,district,party,url FROM member WHERE chamber='Senate'")}
+    if not senators:
+        print("no senators stored -- run: flba members")
+        return 1
+    print(f"rosters: {len(house)} House, {len(senators)} Senate")
+
+    committees = {row["name"] for row in
+                  store.db.execute("SELECT DISTINCT name FROM committee_ref")}
+    house_index = roster_index(house)
+
+    # The Senate links each bill to its sponsor's page, so a senator is
+    # identified outright and never has to be matched by name. The House
+    # publishes no such link, which is what the roster match is for.
+    tokens: dict[tuple[str, str], dict | None] = {}
+    for row in store.db.execute(
+            "SELECT chamber, sponsor, sponsor_url FROM bill WHERE session=?",
+            (args.session,)):
+        people = sponsor_names(row["sponsor"], committees)
+        senator = senators.get(row["sponsor_url"] or "")
+        for token in people:
+            key = (row["chamber"], token)
+            if row["chamber"] != "Senate":
+                tokens.setdefault(key, None)
+            elif len(people) == 1 and senator:
+                tokens[key] = senator
+            else:                           # two senators, one link: unusable
+                tokens.setdefault(key, None)
+
+    linked = unmatched = nofiling = 0
+    for i, ((chamber, token), known) in enumerate(sorted(tokens.items()), 1):
+        member = known or match(token, house_index if chamber == "House" else {})
+        if not member:
+            unmatched += 1
+            store.save_sponsor_finance(args.session, chamber, token, {})
+            print(f"  {chamber[:3]} {token:<22} no certain match on the roster")
+            continue
+        found = tracker.resolve(member["name"])
+        rec = {"member_name": display_name(member["name"]),
+               "district": member["district"], "party": member["party"]}
+        if found:
+            linked += 1
+            rec |= {"person_name": found["name"], "url": found["url"],
+                    "total_received": found["total_received"],
+                    "total_given": found["total_given"],
+                    "filings": found["filings"],
+                    "same_surname": found["same_surname"]}
+        else:
+            nofiling += 1
+            print(f"  {chamber[:3]} {token:<22} {member['name']} -- no filings")
+        store.save_sponsor_finance(args.session, chamber, token, rec)
+        if i % 25 == 0:
+            print(f"  {i}/{len(tokens)}")
+
+    print(f"\nfinance: {linked} linked, {nofiling} with no filing, "
+          f"{unmatched} unmatched, of {len(tokens)} sponsors")
+    return 0
+
+
 def cmd_build(args) -> int:
     """Render the static site the public server will serve."""
     from .site import build
@@ -851,6 +930,7 @@ def main(argv=None) -> int:
                      ("crossref", cmd_crossref), ("statutes", cmd_statutes),
                      ("analyze", cmd_analyze), ("build", cmd_build),
                      ("members", cmd_members), ("reverify", cmd_reverify),
+                     ("finance", cmd_finance),
                      ("digest", cmd_digest), ("status", cmd_status)):
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
@@ -882,6 +962,11 @@ def main(argv=None) -> int:
             sp.add_argument("--json", action="store_true")
         if name == "crossref":
             sp.add_argument("--limit", type=int, default=0)
+        if name == "finance":
+            sp.add_argument("--base-url", default=PACTRACK,
+                            help="where to ask; use http://localhost:3111 locally")
+            sp.add_argument("--public-url", default=PACTRACK,
+                            help="where the published links point")
         if name == "analyze":
             sp.add_argument("number", nargs="?", help="one bill number")
             sp.add_argument("--show", help="print the stored analysis for a bill")
