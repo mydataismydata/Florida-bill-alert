@@ -105,7 +105,7 @@ def display_name(raw: str) -> str:
     text = _NICKNAME.sub(" ", raw)
     head, _, tail = text.partition(",")
     if not (tail and _SUFFIX.sub("", tail).strip()):
-        return re.sub(r"\s+", " ", raw.strip())      # already "First Last"
+        return re.sub(r"\s+", " ", text.strip())     # already "First Last"
     surname = _SUFFIX.sub("", head).strip()
     given = _HONORIFIC.sub("", _SUFFIX.sub("", tail).strip()).strip()
     first = next((w for w in given.split() if not _INITIAL.match(w)), "")

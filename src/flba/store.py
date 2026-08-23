@@ -104,6 +104,10 @@ CREATE TABLE IF NOT EXISTS change (
 
 CREATE TABLE IF NOT EXISTS member (
     chamber TEXT, district INTEGER, name TEXT, party TEXT, url TEXT,
+    -- What they are called, where the chamber publishes it. Kept apart from
+    -- `name` because pages should read "Thomas J. Leek" while a search of the
+    -- campaign filings has to know to also try "Tom".
+    nickname TEXT DEFAULT '',
     fetched_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (chamber, district)
 );
@@ -163,6 +167,19 @@ class Store:
         self.db.execute("PRAGMA synchronous=NORMAL")
         self.db.execute("PRAGMA busy_timeout=30000")
         self.db.executescript(SCHEMA)
+        self._add_missing_columns()
+
+    # CREATE TABLE IF NOT EXISTS leaves an existing table alone, so a column
+    # added later never reaches a database that predates it.
+    _ADDED = (("member", "nickname", "TEXT DEFAULT ''"),)
+
+    def _add_missing_columns(self) -> None:
+        for table, column, decl in self._ADDED:
+            have = {r["name"] for r in
+                    self.db.execute(f"PRAGMA table_info({table})")}
+            if have and column not in have:
+                self.db.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
         self.db.commit()
 
     def log_fetch(self, r) -> None:
@@ -243,11 +260,14 @@ class Store:
                  r.words_deleted, int(r.in_title), int(r.in_body)))
         self.db.execute("COMMIT")
 
-    def save_member(self, chamber, district, name, party, url) -> None:
+    def save_member(self, chamber, district, name, party, url,
+                    nickname: str = "") -> None:
         self.db.execute("BEGIN IMMEDIATE")
         self.db.execute(
-            "INSERT OR REPLACE INTO member (chamber,district,name,party,url)"
-            " VALUES (?,?,?,?,?)", (chamber, district, name, party, url))
+            "INSERT OR REPLACE INTO member"
+            " (chamber,district,name,party,url,nickname)"
+            " VALUES (?,?,?,?,?,?)",
+            (chamber, district, name, party, url, nickname))
         self.db.execute("COMMIT")
 
     def save_sponsor_finance(self, session, chamber, token, rec) -> None:

@@ -47,6 +47,32 @@ def test_nickname_is_kept_as_an_alternative_not_a_replacement():
     assert givens == ["Robert", "Alex"]
 
 
+def test_a_senate_nickname_survives_into_the_search():
+    """Tom Leek's filings are under Tom; the Senate lists him as Thomas J.
+
+    The chamber publishes both and the page shows the formal one, so the
+    nickname has to reach the lookup by some other route or the link is lost.
+    """
+    surname, givens = parse_name('Thomas J. Leek "Tom"')
+    assert surname == "Leek"
+    assert givens == ["Thomas", "Tom"]
+    assert display_name('Thomas J. Leek "Tom"') == "Thomas J. Leek"
+
+
+@pytest.mark.skipif(not DB.exists(), reason="no ingested corpus")
+def test_the_senate_roster_keeps_the_nicknames_it_publishes():
+    db = sqlite3.connect(str(DB))
+    db.row_factory = sqlite3.Row
+    rows = db.execute("SELECT name, nickname FROM member"
+                      " WHERE chamber='Senate'").fetchall()
+    if not rows:
+        pytest.skip("run: flba members")
+    assert any(r["nickname"] for r in rows), (
+        "no nickname stored -- parse_senator_page is dropping them again")
+    for r in rows:
+        assert '"' not in r["name"], f"{r['name']} still carries its nickname"
+
+
 def test_accents_are_folded_because_filings_are_ascii():
     assert fold("Valdés") == "Valdes"
     assert fold("Fabián") == "Fabian"

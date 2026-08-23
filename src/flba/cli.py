@@ -668,7 +668,7 @@ def cmd_members(args) -> int:
             print(f"  {url} -> could not read district/party")
             continue
         store.save_member("Senate", rec["district"], rec["name"],
-                          rec["party"], url)
+                          rec["party"], url, rec.get("nickname", ""))
         saved += 1
         if i % 10 == 0 or i == len(urls):
             print(f"  {i}/{len(urls)}")
@@ -696,7 +696,8 @@ def cmd_finance(args) -> int:
         return 1
     house = parse_roster(r.text())
     senators = {row["url"]: dict(row) for row in store.db.execute(
-        "SELECT name,district,party,url FROM member WHERE chamber='Senate'")}
+        "SELECT name,district,party,url,nickname FROM member"
+        " WHERE chamber='Senate'")}
     if not senators:
         print("no senators stored -- run: flba members")
         return 1
@@ -739,7 +740,13 @@ def cmd_finance(args) -> int:
             store.save_sponsor_finance(args.session, chamber, token, {})
             print(f"  {chamber[:3]} {token:<22} no certain match on the roster")
             continue
-        found = tracker.resolve(member["name"])
+        # Put the nickname back into the name for the search only. A filing
+        # may be under it and nothing else -- Tom Leek's is -- while the page
+        # should still read Thomas J. Leek.
+        searchable = member["name"]
+        if member.get("nickname"):
+            searchable = f'{searchable} "{member["nickname"]}"'
+        found = tracker.resolve(searchable)
         rec = {"member_name": display_name(member["name"]),
                "district": member["district"], "party": member["party"]}
         if found:

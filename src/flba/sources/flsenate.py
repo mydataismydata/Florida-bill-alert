@@ -308,8 +308,9 @@ _DISTRICT_IN_URL = re.compile(r"/Senators/[Ss](\d+)\b")
 # Affiliation", and listing the parties truncated that to "No".
 _PARTY = re.compile(r"^Party:\s*(\S.*?)\s*$")
 # "Senator Shevrin D. "Shev" Jones" -- the nickname is the Senate's own markup,
-# not something to render back at a reader.
-_NICKNAME = re.compile(r'\s*"[^"]*"\s*')
+# not something to render back at a reader. It is still worth keeping: a
+# campaign filing may be under it and nothing else, as Tom Leek's is.
+_NICKNAME = re.compile(r'\s*"([^"]*)"\s*')
 
 
 def senator_url(district: int) -> str:
@@ -324,7 +325,8 @@ def district_of(url: str) -> int | None:
 def parse_senator_page(html: str, url: str) -> dict:
     """Name, party and district for one member, from their Senate page."""
     soup = BeautifulSoup(html, "html.parser")
-    rec = {"url": url, "district": district_of(url), "name": "", "party": ""}
+    rec = {"url": url, "district": district_of(url), "name": "", "party": "",
+           "nickname": ""}
 
     for p in soup.select("p"):
         m = _PARTY.search(_txt(p))
@@ -338,6 +340,9 @@ def parse_senator_page(html: str, url: str) -> dict:
     for node in (block.find_all(["h2", "h3", "h4"]) if block else []):
         text = _txt(node)
         if text.startswith("Senator "):
-            rec["name"] = _NICKNAME.sub(" ", text[len("Senator "):]).strip()
+            full = text[len("Senator "):]
+            found = _NICKNAME.search(full)
+            rec["nickname"] = found.group(1).strip() if found else ""
+            rec["name"] = _NICKNAME.sub(" ", full).strip()
             break
     return rec
