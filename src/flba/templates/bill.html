@@ -37,17 +37,21 @@
   </div>
 
   <div class="factledger">
-    {% if sponsor_parts %}<div class="row"><div class="k">SPONSOR</div><div class="v">
-      {%- for s in sponsor_parts %}{% if not loop.first %}; {% endif %}{{ s.name }}
-        {%- if s.url %} <a class="donations" href="{{ s.url }}" target="_blank"
-          rel="noopener"
-          title="Campaign filings for {{ s.member_name }}">[search donations]</a>
-        {%- endif %}
-      {%- endfor %}</div></div>{% endif %}
-    {% if members and (sponsor_has_committees or member) %}
+    {% if b.sponsor %}<div class="row"><div class="k">SPONSOR</div><div class="v">{{ b.sponsor }}</div></div>{% endif %}
+    {% if filed_by %}
     <div class="row"><div class="k">FILED BY</div><div class="v">
-      {%- if member %}<a href="{{ member.url }}" target="_blank" rel="noopener">{{ member.name or members|join('; ') }}</a> — District {{ member.district }}, {{ member.party }}
-      {%- else %}{{ members|join('; ') }}{% endif %}</div></div>
+      {% for m in filed_by %}
+      <div class="filer">
+        {%- if m.page %}<a href="{{ m.page }}" target="_blank" rel="noopener">{{ m.member_name or m.token }}</a>
+        {%- else %}{{ m.member_name or m.token }}{% endif %}
+        {%- if m.district %} — District {{ m.district }}, {{ m.party }}{% endif %}
+        {%- if m.url %} <a class="donations" href="{{ m.url }}" target="_blank"
+          rel="noopener"
+          title="Campaign filings for {{ m.member_name }}">[search donations]</a>
+        {%- endif %}
+      </div>
+      {% endfor %}
+    </div></div>
     {% endif %}
     {% if b.effective_date %}<div class="row"><div class="k">EFFECTIVE</div><div class="v">{{ b.effective_date }}</div></div>{% endif %}
     {% if p.companion %}<div class="row"><div class="k">COMPANION</div><div class="v">{{ p.companion }} — this bill was set aside and its companion carried the policy</div></div>{% endif %}

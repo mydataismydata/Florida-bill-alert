@@ -223,15 +223,15 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     members_by_url = {r["url"]: dict(r) for r in
                       _rows(db, "SELECT * FROM member")}
 
-    # Campaign filings, matched by `flba finance` before the build. Rows with
-    # no url were checked and came back empty; they stay out so the template
-    # shows nothing rather than a dead link. A corpus ingested before this
-    # existed has no table at all, and that must not stop a build.
-    funding = {}
+    # Who each sponsor actually is, matched by `flba finance` before the
+    # build: full name, district, party, and a link to their filings where
+    # there are any. A corpus ingested before this existed has no table at
+    # all, and that must not stop a build.
+    sponsors = {}
     if _has_table(db, "sponsor_finance"):
-        funding = {(r["chamber"], r["token"]): dict(r) for r in
-                   _rows(db, "SELECT * FROM sponsor_finance"
-                             " WHERE session=? AND url<>''", session)}
+        sponsors = {(r["chamber"], r["token"]): dict(r) for r in
+                    _rows(db, "SELECT * FROM sponsor_finance"
+                              " WHERE session=? AND member_name<>''", session)}
 
     history: dict[int, list] = {}
     for r in _rows(db, "SELECT num,date,chamber,action FROM history"
@@ -313,16 +313,25 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         area = classify([r["statute"] for r in refs], b["title"] or "")
         _panels, members = split_sponsor(b["sponsor"] or "", committees)
         member = members_by_url.get(b["sponsor_url"] or "")
-        # The sponsor line keeps the chamber's own wording and order; the
-        # donations link is added to the parts that name a person.
-        sponsor_parts = [
-            dict(funding.get((b["chamber"], part)) or {}, name=part)
-            for part in (p.strip() for p in (b["sponsor"] or "").split(";"))
-            if part]
+        # The sponsor row stays the chamber's own wording. Everything we have
+        # added to it -- the person's full name, their seat, their filings --
+        # belongs on the line that names the people, not the raw field.
+        filed_by = [
+            dict(sponsors.get((b["chamber"], token)) or {},
+                 token=token,
+                 # Only one member can be meant by the bill's own link.
+                 page=member["url"] if member and len(members) == 1 else "")
+            for token in members]
+        # A row that repeats the sponsor field word for word is noise. It
+        # earns its place by naming the person a committee chain hides, or by
+        # carrying a seat, a party or a link the field above does not.
+        if not (_panels or any(f.get("district") or f.get("url") or f.get("page")
+                               for f in filed_by)):
+            filed_by = []
         html = env.get_template("bill.html").render(
             root="../", b=b, p=prog, path=pathway(prog), refs=refs,
             members=members, sponsor_has_committees=bool(_panels),
-            member=member, sponsor_parts=sponsor_parts,
+            member=member, filed_by=filed_by,
             area=area, area_slug=slug(area),
             shown_provisions=SHOWN_PROVISIONS,
             blocks=blocks, total_blocks=len(all_blocks),

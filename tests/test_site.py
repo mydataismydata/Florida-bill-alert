@@ -340,7 +340,21 @@ def test_the_filed_by_row_only_appears_when_it_adds_something(built):
             seen_chain += 1
         elif "SPONSOR" in cells:
             seen_plain += 1
-    assert seen_chain and seen_plain
+    assert seen_chain
+
+    # The suppression path needs a bill filed by a committee and nobody else,
+    # which the sample above does not always reach. The appropriations bills
+    # are the standing example: there is no person to name.
+    import sqlite3
+
+    from flba.site import split_sponsor
+    db = sqlite3.connect(str(DB))
+    db.row_factory = sqlite3.Row
+    known = {r["name"] for r in db.execute("SELECT DISTINCT name FROM committee_ref")}
+    faceless = [r["label"] for r in
+                db.execute("SELECT label,sponsor FROM bill WHERE session='2026'")
+                if (lambda s: s[0] and not s[1])(split_sponsor(r["sponsor"], known))]
+    assert faceless, "expected bills filed by a committee alone"
 
 
 def test_the_official_record_shows_the_whole_url(built):
@@ -404,7 +418,10 @@ def test_a_senate_sponsor_carries_a_link_district_and_party(built):
                     if r.select_one(".k").get_text(strip=True) == "FILED BY"), None)
         if not row:
             continue
-        a = row.select_one("a")
+        # The member's own chamber page, as distinct from the campaign-finance
+        # link that sits beside it.
+        a = next((x for x in row.select("a")
+                  if "donations" not in (x.get("class") or [])), None)
         if not a:
             continue
         assert "/Senators/" in a["href"]

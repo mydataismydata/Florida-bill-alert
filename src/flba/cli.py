@@ -724,6 +724,13 @@ def cmd_finance(args) -> int:
             else:                           # two senators, one link: unusable
                 tokens.setdefault(key, None)
 
+    # Drop the previous run's rows first. Committee names and withdrawn
+    # sponsors would otherwise sit here for good, because a write only ever
+    # replaces the token it is writing.
+    store.db.execute("DELETE FROM sponsor_finance WHERE session=?",
+                     (args.session,))
+    store.db.commit()
+
     linked = unmatched = nofiling = 0
     for i, ((chamber, token), known) in enumerate(sorted(tokens.items()), 1):
         member = known or match(token, house_index if chamber == "House" else {})
