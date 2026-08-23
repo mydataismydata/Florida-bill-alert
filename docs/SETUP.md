@@ -157,20 +157,53 @@ things), and follows the reader's light or dark preference.
 ### Publishing
 
 ```bash
-export FLBA_HOST=u12345@access.example.com
-export FLBA_PATH=/homepages/12/htdocs/billalert
+cat > .env <<'EOF'
+FLBA_HOST=access.example.com
+FLBA_USER=u12345678
+FLBA_PATH=/billalert
+FLBA_URL=https://bills.example.com
+EOF
 
-scripts/deploy.sh          # dry run — shows what would change
-scripts/deploy.sh --go     # push
+scripts/deploy.py          # dry run — shows what would change
+scripts/deploy.py --go     # push
 ```
+
+Set up key authentication once, so a push never stops to ask for a password:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/ionos -N ''
+ssh-copy-id -i ~/.ssh/ionos.pub u12345678@access.example.com
+```
+
+**Only what changed travels.** The site is regenerated from templates, so every
+file's timestamp moves on every build even when its bytes do not — which is why
+this compares content, not times. A rebuild after one bill's analysis ships
+three files, not 9,731. The first push is the whole site; after that a manifest
+in `.deploy/` records what the server holds.
+
+Above a few hundred changed files it sends one archive and a short PHP
+unpacker instead, because thousands of separate uploads spend their time
+waiting on round trips rather than moving bytes. The unpacker needs a token,
+deletes the archive, then deletes itself. `FLBA_URL` is what lets the script
+trigger it without a browser.
 
 The push is one-way. The public host never connects back to this machine and
 holds no model, no pipeline, and no database — only files. That is what makes
 the gap structural rather than merely configured.
 
-`--delete` keeps the public tree an exact mirror so withdrawn content does not
-linger, and `--checksum` is used because a rebuild rewrites every file's
-timestamp even when the bytes are unchanged.
+### No SFTP account
+
+```bash
+scripts/deploy.py --pack
+```
+
+Writes `dist/_deploy.zip` and `dist/_unpack.php`. Upload those two by hand,
+open the URL it prints, done — two files rather than the whole tree. It cannot
+delete files that left the site, so it prints those for you to remove.
+
+`scripts/deploy.sh` is the older rsync-over-SSH path. It still works if the
+host gives you a shell, but it needs one; SFTP is available on plans that do
+not.
 
 ## Running the site locally, with the operator controls
 
