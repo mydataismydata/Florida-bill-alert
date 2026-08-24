@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "_repull.html" import repull %}
-{% block title %}{{ b.label }} — {{ b.title|truncate(70) }} · {{ site_name }}{% endblock %}
-{% block description %}{{ b.label }}: {{ b.title|truncate(150) }}{% endblock %}
+{% block title %}{{ b.label|billno }} — {{ b.title }}{% endblock %}
+{% block description %}{{ b.label|billno }}: {{ b.title|truncate(150) }}{% endblock %}
 
 
 {% block masthead %}

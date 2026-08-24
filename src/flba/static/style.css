@@ -189,13 +189,24 @@ table.ledger thead th { text-align: left; padding: 9px 4px;
   border-bottom: 2px solid var(--ru); font: 500 10px var(--mono);
   letter-spacing: .14em; color: var(--ink3); font-weight: 500; }
 table.ledger thead th:last-child, table.ledger td.disp { text-align: right; }
+/* Every column sorts, so every heading says so before it is clicked rather
+   than only marking the one already in use. */
+table.ledger thead th[data-sort] { cursor: pointer;
+  -webkit-user-select: none; user-select: none; }
+table.ledger thead th[data-sort]:hover { color: var(--ink2); }
+table.ledger thead th[data-sort]::after { content: '\2195'; padding-left: 6px;
+  opacity: .3; }
+table.ledger thead th.asc::after { content: '\2191'; opacity: 1; color: var(--acc); }
+table.ledger thead th.desc::after { content: '\2193'; opacity: 1; color: var(--acc); }
 table.ledger td { padding: 12px 4px; border-bottom: 1px solid var(--ru2);
   vertical-align: baseline; }
 table.ledger tbody tr:hover { background: var(--bg1); }
-table.ledger td.no { width: 160px; font: 500 13px var(--mono); }
+table.ledger td.no { width: 110px; font: 500 13px var(--mono); }
 table.ledger td.no a { color: var(--acc); }
 table.ledger td.title { font-size: 15.5px; }
-table.ledger td.disp { width: 190px; font: 400 11.5px var(--mono); color: var(--ink2); }
+table.ledger td.filed { width: 230px; font: 400 12.5px var(--mono);
+  color: var(--ink2); }
+table.ledger td.disp { width: 180px; font: 400 11.5px var(--mono); color: var(--ink2); }
 .more { padding: 14px 4px; text-align: center; font: 500 11.5px var(--mono);
   letter-spacing: .1em; }
 .more a { color: var(--acc); }
@@ -223,7 +234,17 @@ footer.site a { color: var(--acc2); }
   .wordmark { font-size: 30px; }
   .hero h1 { font-size: 27px; }
   table.ledger td.no { width: 96px; }
+  table.ledger td.filed { width: 150px; }
   table.ledger td.disp { width: auto; }
+}
+
+/* Four columns is one too many for a phone, and the title is the column a
+   reader came for. The sponsor is still on the bill's own page. */
+@media (max-width: 700px) {
+  table.ledger th[data-sort="f"], table.ledger td.filed { display: none; }
+  /* the count keeps its own line rather than squeezing the heading to one
+     word per line */
+  .ledger-head { flex-wrap: wrap; }
 }
 
 /* ================================================================ bill page */

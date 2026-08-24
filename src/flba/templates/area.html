@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_ledger.html" as ledger %}
 {% block title %}{{ area }} · {{ site_name }}{% endblock %}
 {% block description %}Bills in the Florida Legislature filed under {{ area }}.{% endblock %}
 {% block masthead %}
@@ -19,22 +20,22 @@
   <h1>{{ area }}</h1>
 </section>
 
-<section class="wrap" style="padding-top:24px">
+<section class="wrap" style="padding-top:24px" id="bills">
   <div class="areastrip" style="margin-top:0">
     <p>{{ '{:,}'.format(rows|length) }} bill{{ '' if rows|length == 1 else 's' }} in
        the {{ session }} session — subscribe to see new ones the day they're filed.</p>
     <a class="btn" href="{{ root }}subscribe.html?area={{ area_slug }}">Get alerts</a>
   </div>
 
-  <table class="ledger">
-    <thead><tr><th>NO.</th><th>TITLE</th><th>DISPOSITION</th></tr></thead>
-    <tbody>{% for b in rows %}
-    <tr>
-      <td class="no"><a href="{{ root }}bills/{{ b.num }}.html">{{ b.label }}</a></td>
-      <td class="title">{{ b.title }}</td>
-      <td class="disp">{{ b.disposition }}</td>
-    </tr>{% endfor %}</tbody>
-  </table>
+  <div class="ledger-head" style="margin-top:28px">
+    <h2>The record of bills</h2>
+    <div class="count" id="hint">SHOWING {{ '{:,}'.format(rows|length) }} — {{ area|upper }}</div>
+  </div>
+  <div class="controls">
+    <input type="search" id="q" placeholder="Search by number, title, or sponsor" autocomplete="off">
+  </div>
+
+{{ ledger.table(rows, root) }}
 
   <div style="margin:28px 0 0;border-top:1px solid var(--ru2);padding-top:20px">
     <div style="font:500 10px var(--mono);letter-spacing:.14em;color:var(--ink3)">OTHER AREAS</div>
@@ -45,4 +46,6 @@
     </div>
   </div>
 </section>
+
+{{ ledger.script(rows, root, area|upper) }}
 {% endblock %}

@@ -525,3 +525,88 @@ def test_the_full_text_page_keeps_its_stylesheet(built):
     css = (out / "style.css").read_text(encoding="utf-8")
     for rule in (".doc", ".doc .ln", ".doc .no", ".doc .tx", ".doc ins", ".doc del"):
         assert rule in css, rule
+
+
+def test_a_bill_number_drops_its_committee_substitutes():
+    """CS/CS/SB 36 is SB 36 carried through two substitutes. The prefix is
+    history, not identity, and listings ask which bill this is."""
+    from flba.site import short_label
+    assert short_label("CS/CS/SB 36") == "SB 36"
+    assert short_label("CS/CS/CS/CS/HB 1445") == "HB 1445"
+    assert short_label("SB 2") == "SB 2"
+    assert short_label("") == ""
+
+
+def test_the_listing_shows_the_bare_number_and_still_finds_the_full_one(built):
+    """A reader who pastes "CS/HB 21" off the Legislature's site must land on
+    the bill the column shows as "HB 21"."""
+    import sqlite3
+    out, _ = built
+    idx = {r["n"]: r for r in json.loads((out / "search-index.json").read_text())}
+    labels = dict(sqlite3.connect(str(DB)).execute(
+        "SELECT num, label FROM bill WHERE session='2026'"))
+    carried = 0
+    for n, r in idx.items():
+        full = labels[n]
+        assert r["l"] == full.rsplit("/", 1)[-1], full
+        assert full.lower() in r["s"], f"{full} is no longer searchable"
+        carried += "/" in full
+    assert carried, "no committee substitute in this slice to check"
+
+
+def test_the_browser_tab_names_the_bill_not_its_committee_history(built):
+    from bs4 import BeautifulSoup
+    out, _ = built
+    idx = json.loads((out / "search-index.json").read_text())
+    seen = 0
+    for r in idx:
+        page = out / "bills" / f"{r['n']}.html"
+        soup = BeautifulSoup(page.read_text(encoding="utf-8"), "lxml")
+        title = soup.title.string
+        assert "CS/" not in title, title
+        assert title.startswith(r["l"] + " — "), title
+        seen += 1
+    assert seen
+
+
+def test_every_listed_bill_names_who_filed_it(built):
+    """The column is only worth a column if it is never blank: a bill with no
+    member behind it was filed by a committee, and that is the answer."""
+    out, _ = built
+    idx = json.loads((out / "search-index.json").read_text())
+    for r in idx:
+        assert r["f"], f"bill {r['n']} lists nobody"
+        assert r["k"], f"bill {r['n']} has nothing to sort on"
+
+
+def _listing(path):
+    from bs4 import BeautifulSoup
+    return BeautifulSoup(path.read_text(encoding="utf-8"), "lxml")
+
+
+def test_both_listings_offer_the_same_search_and_sorting(built):
+    """An area page is the same ledger over fewer bills, so it gets the same
+    controls -- a reader who learns one has learned the other."""
+    out, _ = built
+    area = max((out / "area").glob("*.html"),
+               key=lambda p: len(_listing(p).select("#billtable tbody tr")))
+    for page in (out / "index.html", area):
+        soup = _listing(page)
+        cols = [th["data-sort"] for th in soup.select("#billtable thead th[data-sort]")]
+        assert cols == ["n", "t", "f", "d"], f"{page.name}: {cols}"
+        assert soup.select_one("#q"), f"{page.name} has no search box"
+        assert soup.select_one("#rows"), f"{page.name} ships no rows to sort"
+        rows = soup.select("#billtable tbody tr")
+        assert rows, f"{page.name} renders no bills without javascript"
+        assert all(len(r.find_all("td")) == 4 for r in rows), page.name
+        assert rows[0].select_one("td.filed").get_text(strip=True), page.name
+
+
+def test_an_area_listing_carries_only_that_areas_bills(built):
+    out, _ = built
+    idx = {r["n"]: r for r in json.loads((out / "search-index.json").read_text())}
+    for page in (out / "area").glob("*.html"):
+        soup = _listing(page)
+        area = soup.h1.get_text(strip=True)
+        rows = json.loads(soup.select_one("#rows").string or "[]")
+        assert all(idx[r["n"]]["a"] == area for r in rows), page.name

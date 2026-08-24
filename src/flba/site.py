@@ -47,6 +47,7 @@ def _env() -> Environment:
         autoescape=select_autoescape(["html"]),
         trim_blocks=True, lstrip_blocks=True)
     env.filters["money"] = money
+    env.filters["billno"] = short_label
     return env
 
 
@@ -65,6 +66,13 @@ def money(amount) -> str:
     if value >= 1_000:
         return f"${value / 1_000:.0f}k"
     return f"${value:,.0f}"
+
+
+# "CS/CS/SB 36" is one bill, SB 36, carried through two committee
+# substitutes. The prefix is a fact about its history and says nothing about
+# which bill it is, so listings and browser tabs show the number alone.
+def short_label(label: str) -> str:
+    return (label or "").rsplit("/", 1)[-1].strip()
 
 
 def _rows(db, sql, *args):
@@ -244,7 +252,7 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                   page="")
 
     # ---------------------------------------------------------- bill pages
-    index_rows, outcomes, enacted = [], {}, []
+    index_rows, outcomes, enacted, enacted_rows = [], {}, [], []
     by_area: dict = {}
     by_area_of: dict = {}
     progress: dict[int, object] = {}
@@ -322,6 +330,16 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                  # Only one member can be meant by the bill's own link.
                  page=member["url"] if member and len(members) == 1 else "")
             for token in members]
+        # The listing names whoever filed the bill whatever else the page
+        # carries, so the names are taken before the row below is thinned out.
+        filed_names = ([f.get("member_name") or f["token"] for f in filed_by]
+                       or _panels)
+        # What that column sorts on. It reads "Ana Maria Rodriguez" and a
+        # reader looking for her is looking under R, so it sorts by surname --
+        # which the sponsor token already is, rather than the last word of a
+        # name, which it only usually is and which a committee has none of.
+        filed_key = ("; ".join(f["token"] for f in filed_by)
+                     or "; ".join(_panels)).lower()
         # A row that repeats the sponsor field word for word is noise. It
         # earns its place by naming the person a committee chain hides, or by
         # carrying a seat, a party or a link the field above does not.
@@ -343,19 +361,26 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         (out / "bills" / f"{b['num']}.html").write_text(html, encoding="utf-8")
 
         row = {
-            "n": b["num"], "l": b["label"], "t": (b["title"] or "")[:120],
+            "n": b["num"], "l": short_label(b["label"]),
+            "t": (b["title"] or "")[:120], "f": "; ".join(filed_names),
+            "k": filed_key,
             "o": prog.outcome, "d": prog.outcome_label.upper(),
             "a": area or "",
-            "s": " ".join(filter(None, [
-                b["label"], b["title"], b["sponsor"], b["cosponsors"]])).lower(),
+            # The number as the Legislature writes it stays searchable even
+            # though the short one is shown, so a pasted "CS/CS/SB 36" still
+            # finds the bill. The names are here because the sponsor field
+            # holds surnames and a reader looking for a member has a person.
+            "s": " ".join(filter(None, [b["label"], b["title"], b["sponsor"],
+                                        b["cosponsors"]] + filed_names)).lower(),
         }
         if b["chapter_law"]:
             row["d"] = f"LAW · {b['chapter_law']}"
         index_rows.append(row)
-        by_area.setdefault(area, []).append(dict(b))
+        by_area.setdefault(area, []).append(row)
         by_area_of[b["num"]] = area
         if b["chapter_law"]:
             enacted.append(b)
+            enacted_rows.append(row)
         if i % 400 == 0:
             log(f"  {i}/{len(bills)} bill pages")
 
@@ -430,26 +455,22 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     # the pre-rendered table is what a reader without JavaScript sees
     default_outcome = ("became_law" if outcomes.get("became_law")
                        else (outcome_cards[0]["key"] if outcome_cards else "all"))
+    default_noun = next((c["label"].upper() for c in outcome_cards
+                         if c["key"] == default_outcome), "ALL BILLS")
 
     (out / "index.html").write_text(env.get_template("index.html").render(
         root="", outcomes=outcome_cards, default_outcome=default_outcome,
-        enacted=sorted(enacted, key=lambda b: b["num"]),
+        default_noun=default_noun, enacted=enacted_rows,
         index_rows=index_rows,
         top_statutes=stat_rows[:10], **common), encoding="utf-8")
 
     # ------------------------------------------------------------ areas
     (out / "area").mkdir(parents=True, exist_ok=True)
     for a in AREAS:
-        rows = sorted(by_area.get(a, []), key=lambda b: b["num"])
+        rows = sorted(by_area.get(a, []), key=lambda r: r["n"])
         (out / "area" / f"{slug(a)}.html").write_text(
             env.get_template("area.html").render(
-                root="../", area=a, area_slug=slug(a),
-                rows=[{"num": b["num"], "label": b["label"],
-                       "title": b["title"],
-                       "disposition": (f"LAW · {b['chapter_law']}" if b["chapter_law"]
-                                       else (progress[b["num"]].outcome_label.upper()
-                                             if b["num"] in progress else ""))}
-                      for b in rows],
+                root="../", area=a, area_slug=slug(a), rows=rows,
                 **common), encoding="utf-8")
 
     # --------------------------------------------------------- calendar

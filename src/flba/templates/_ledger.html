@@ -1,0 +1,158 @@
+{#
+  One bill listing, shared by the home page and every area page.
+
+  The rows go to the browser as JSON and the table is rebuilt whenever the
+  reader searches, filters or sorts. What is rendered server-side is the same
+  table in the same default order, so a reader without JavaScript still gets
+  the list and every row still links out.
+
+  The pieces the home page has and an area page does not -- the outcome tiles,
+  the filter strip -- are looked up by id and skipped when absent, so one
+  script serves both.
+#}
+
+{% macro table(rows, root) %}
+<table class="ledger" id="billtable">
+  <thead><tr>
+    <th data-sort="n" class="asc" aria-sort="ascending" tabindex="0" role="button">NO.</th>
+    <th data-sort="t" tabindex="0" role="button">TITLE</th>
+    <th data-sort="f" tabindex="0" role="button">FILED BY</th>
+    <th data-sort="d" tabindex="0" role="button">DISPOSITION</th>
+  </tr></thead>
+  <tbody>{% for b in rows %}
+    <tr>
+      <td class="no"><a href="{{ root }}bills/{{ b.n }}.html">{{ b.l }}</a></td>
+      <td class="title">{{ b.t }}</td>
+      <td class="filed">{{ b.f }}</td>
+      <td class="disp">{{ b.d }}</td>
+    </tr>{% endfor %}</tbody>
+</table>
+{# Nothing is capped until the script has filtered something, so this stays
+   out of the way until draw() has a reason to reveal it. #}
+<div class="more" id="showall" style="display:none"><a href="#bills">SHOW ALL →</a></div>
+{% endmacro %}
+
+{% macro script(rows, root, noun, outcome='all', cap=400) %}
+<script id="rows" type="application/json">{{ rows|tojson }}</script>
+<script>
+(function () {
+  var CAP = {{ cap }},
+      ROOT = {{ root|tojson }},
+      rows = JSON.parse(document.getElementById('rows').textContent),
+      table = document.getElementById('billtable'),
+      body = table.querySelector('tbody'),
+      head = table.querySelector('thead'),
+      hint = document.getElementById('hint'),
+      q = document.getElementById('q'),
+      showall = document.getElementById('showall'),
+      tiles = document.getElementById('tiles'),
+      filters = document.getElementById('filters'),
+      outcome = {{ outcome|tojson }}, noun = {{ noun|tojson }},
+      capped = true, key = 'n', dir = 1;
+
+  function matches(r) {
+    if (outcome !== 'all' && r.o !== outcome) return false;
+    var t = q.value.trim().toLowerCase();
+    if (!t) return true;
+    // r.s carries the number as the Legislature writes it, so a reader who
+    // pastes "CS/CS/SB 36" still finds the bill the column shows as "SB 36".
+    return (r.l + ' ' + r.t + ' ' + (r.f || '') + ' ' + (r.s || ''))
+             .toLowerCase().indexOf(t) >= 0;
+  }
+
+  // Two columns do not sort on the text they show. FILED BY reads "Ana Maria
+  // Rodriguez" and a reader looking for her is looking under R, so it sorts on
+  // r.k, the surname the build already knew. DISPOSITION reads "LAW · 2026-186"
+  // and the chapter number is not what anyone is ordering by, so it sorts on
+  // the word and lets the tie-break below put that group in bill order.
+  function keyOf(r) {
+    if (key === 'f') return (r.k || r.f || '').toLowerCase();
+    if (key === 'd') return (r.d || '').split('\u00b7')[0].trim().toLowerCase();
+    return (r[key] || '').toLowerCase();
+  }
+  // An empty cell is not the smallest value, it is the absence of one, so it
+  // sorts to the bottom either way round. Ties fall back to the bill number,
+  // which is the order the page starts in.
+  function cmp(a, b) {
+    if (key === 'n') return (a.n - b.n) * dir;
+    var x = keyOf(a), y = keyOf(b);
+    if (!x !== !y) return x ? -1 : 1;
+    return (x < y ? -1 : x > y ? 1 : 0) * dir || a.n - b.n;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function draw() {
+    var hit = rows.filter(matches).sort(cmp),
+        shown = capped ? hit.slice(0, CAP) : hit, html = '';
+    for (var i = 0; i < shown.length; i++) {
+      var r = shown[i];
+      html += '<tr><td class="no"><a href="' + ROOT + 'bills/' + r.n + '.html">' +
+              esc(r.l) + '</a></td><td class="title">' + esc(r.t) +
+              '</td><td class="filed">' + esc(r.f) + '</td><td class="disp">' +
+              esc(r.d) + '</td></tr>';
+    }
+    body.innerHTML = html || '<tr><td colspan="4" class="title" style="padding:22px 4px;color:var(--ink3)">No bills match.</td></tr>';
+    if (hint) hint.textContent = 'SHOWING ' + hit.length.toLocaleString() +
+                                 (noun ? ' — ' + noun : '');
+    if (showall) {
+      showall.style.display = (capped && hit.length > CAP) ? '' : 'none';
+      showall.firstChild.textContent = 'SHOW ALL ' + hit.length.toLocaleString() + ' →';
+    }
+  }
+
+  function marks() {
+    Array.prototype.forEach.call(head.querySelectorAll('th[data-sort]'), function (th) {
+      var on = th.getAttribute('data-sort') === key;
+      th.className = on ? (dir > 0 ? 'asc' : 'desc') : '';
+      th.setAttribute('aria-sort', on ? (dir > 0 ? 'ascending' : 'descending') : 'none');
+    });
+  }
+  function sortBy(th) {
+    var k = th.getAttribute('data-sort');
+    // A second click on the same column turns it round; a first click on any
+    // other starts from the top of that column.
+    dir = (k === key) ? -dir : 1;
+    key = k;
+    marks(); draw();
+  }
+  head.addEventListener('click', function (e) {
+    var th = e.target.closest('th[data-sort]'); if (th) sortBy(th);
+  });
+  head.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var th = e.target.closest('th[data-sort]');
+    if (th) { e.preventDefault(); sortBy(th); }
+  });
+
+  function pick(el) {
+    outcome = el.getAttribute('data-outcome');
+    noun = (el.getAttribute('data-noun') || el.textContent).trim().toUpperCase();
+    capped = true;
+    if (filters) Array.prototype.forEach.call(filters.querySelectorAll('a'), function (a) {
+      a.className = a.getAttribute('data-outcome') === outcome ? 'on' : '';
+    });
+    if (tiles) Array.prototype.forEach.call(tiles.querySelectorAll('a'), function (a) {
+      var law = a.getAttribute('data-outcome') === 'became_law';
+      a.className = 'cell' + (law ? ' law' : '') +
+                    (a.getAttribute('data-outcome') === outcome ? ' on' : '');
+    });
+    draw();
+  }
+  [tiles, filters].forEach(function (host) {
+    if (!host) return;
+    host.addEventListener('click', function (e) {
+      var a = e.target.closest('a[data-outcome]'); if (a) pick(a);
+    });
+  });
+  if (showall) showall.addEventListener('click', function (e) {
+    e.preventDefault(); capped = false; draw();
+  });
+  q.addEventListener('input', function () { capped = true; draw(); });
+  marks();
+})();
+</script>
+{% endmacro %}
