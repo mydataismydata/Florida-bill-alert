@@ -635,3 +635,17 @@ def test_a_rebuild_on_another_day_touches_only_the_pages_about_the_day(
                if (out / r).read_bytes() != (later / r).read_bytes()}
     assert changed == {"index.html", "about.html", "calendar.html",
                        "subscribe.html"}, changed
+
+
+def test_every_face_the_stylesheet_asks_for_is_shipped(built):
+    """A face the build forgets is six 404s in the reader's console and a page
+    silently set in a fallback, with nothing in the build to say so."""
+    import re
+    out, _ = built
+    css = (out / "style.css").read_text(encoding="utf-8")
+    asked = [m.strip("'\" ") for m in re.findall(r"url\(([^)]+)\)", css)]
+    assert asked, "the stylesheet names no faces -- has it moved?"
+    for ref in asked:
+        assert not ref.startswith(("http", "//", "data:")), (
+            f"{ref} would send a reader to a third party")
+        assert (out / ref).exists(), f"style.css asks for {ref}, which is not built"

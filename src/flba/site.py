@@ -84,6 +84,18 @@ def _has_table(db, name: str) -> bool:
                            " WHERE type='table' AND name=?", (name,)).fetchone())
 
 
+def _copy_static(out: Path) -> None:
+    """The stylesheet and the six faces it names.
+
+    They travel with the site because no page may reach a font CDN: a reader
+    opening a bill is not a reason for a third party to hear about it. Copying
+    the stylesheet alone left the CSS asking the host for files it did not
+    have, which is six 404s and a page silently in a fallback face.
+    """
+    shutil.copy(HERE / "static" / "style.css", out / "style.css")
+    shutil.copytree(HERE / "static" / "fonts", out / "fonts", dirs_exist_ok=True)
+
+
 def _copy_endpoints(out: Path) -> None:
     """Ship the subscribe endpoints with the bundle.
 
@@ -393,7 +405,7 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         # The stylesheet is one file and every page depends on it, so it is
         # copied here too -- skipping it left a rebuilt page styled by the
         # previous build's CSS.
-        shutil.copy(HERE / "static" / "style.css", out / "style.css")
+        _copy_static(out)
         return {"bills": len(bills), "statutes": 0, "files": 0, "bytes": 0,
                 "outcomes": outcomes, "partial": True}
 
@@ -523,7 +535,7 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         root="", superseded=outcomes.get("superseded", 0), analysed=analysed,
         **common), encoding="utf-8")
 
-    shutil.copy(HERE / "static" / "style.css", out / "style.css")
+    _copy_static(out)
     _copy_endpoints(out)
 
 
