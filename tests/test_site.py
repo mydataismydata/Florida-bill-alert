@@ -610,3 +610,28 @@ def test_an_area_listing_carries_only_that_areas_bills(built):
         area = soup.h1.get_text(strip=True)
         rows = json.loads(soup.select_one("#rows").string or "[]")
         assert all(idx[r["n"]]["a"] == area for r in rows), page.name
+
+
+def test_a_rebuild_on_another_day_touches_only_the_pages_about_the_day(
+        built, tmp_path_factory):
+    """The build date used to sit in every footer, so a rebuild the next
+    morning rewrote all 9,731 files and turned every deploy into a full one.
+
+    Three pages are about the day by nature -- the calendar, the specimen
+    alert on the subscribe page -- and two carry the stamp deliberately.
+    Nothing else may move when only the date does.
+    """
+    from flba.site import build
+    out, _ = built
+    later = tmp_path_factory.mktemp("site-later")
+    build(DB, later, "2026", built="2026-11-30", limit=40)
+
+    def names(root):
+        return {p.relative_to(root).as_posix()
+                for p in root.rglob("*") if p.is_file()}
+
+    assert names(out) == names(later), "the two builds wrote different files"
+    changed = {r for r in names(out)
+               if (out / r).read_bytes() != (later / r).read_bytes()}
+    assert changed == {"index.html", "about.html", "calendar.html",
+                       "subscribe.html"}, changed

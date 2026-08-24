@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "_ledger.html" as ledger %}
+{% block stamp %} BUILT {{ built }} · {{ '{:,}'.format(bill_count) }} BILLS ·{% endblock %}
 {% block title %}{{ site_name }} — {{ session }} session{% endblock %}
 {% block body %}
 

@@ -30,7 +30,10 @@
 </main>
 
 <footer class="site">
-  SESSION {{ session }} · BUILT {{ built }} · {{ '{:,}'.format(bill_count) }} BILLS ·
+  {# The stamp is what dates a build, so it sits on the two pages a reader
+     goes to for the state of things -- not on all 9,731, where it turned
+     every rebuild into a full redeploy. #}
+  SESSION {{ session }} ·{% block stamp %}{% endblock %}
   DATA PULLED FROM <a href="https://www.flsenate.gov" target="_blank" rel="noopener">FLSENATE.GOV</a> ·
   <a href="{{ repo }}" target="_blank" rel="noopener">FREE AND OPEN SOURCE</a>
 </footer>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block stamp %} BUILT {{ built }} · {{ '{:,}'.format(bill_count) }} BILLS ·{% endblock %}
 {% block title %}About · {{ site_name }}{% endblock %}
 {% block description %}Who this is for, where every fact comes from, and what the language model is and is not allowed to do.{% endblock %}
 {% block masthead %}
