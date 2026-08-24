@@ -649,3 +649,26 @@ def test_every_face_the_stylesheet_asks_for_is_shipped(built):
         assert not ref.startswith(("http", "//", "data:")), (
             f"{ref} would send a reader to a third party")
         assert (out / ref).exists(), f"style.css asks for {ref}, which is not built"
+
+
+def test_every_disposition_filter_offered_can_actually_match_something(built):
+    """An area holds a different set of endings from the session as a whole.
+    A filter that empties the table is worse than an absent one: the reader
+    learns nothing from it and cannot tell a bug from a fact."""
+    out, _ = built
+    pages = [out / "index.html", *sorted((out / "area").glob("*.html"))]
+    checked = 0
+    for page in pages:
+        soup = _listing(page)
+        strip = soup.select("#filters a[data-outcome]")
+        if not strip:
+            continue
+        present = {r["o"] for r in json.loads(soup.select_one("#rows").string or "[]")}
+        for a in strip:
+            key = a["data-outcome"]
+            assert key == "all" or key in present, (
+                f"{page.name}: {key} filters to nothing")
+        assert len(soup.select("#filters a.on")) == 1, (
+            f"{page.name}: exactly one filter must start active")
+        checked += 1
+    assert checked > 1, "no area page carried a filter strip"

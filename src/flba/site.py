@@ -23,7 +23,7 @@ from .analysis.analyze import tidy_statute
 from .analysis.brief import build as build_brief
 from .diff import PLAIN, BillDiff, Segment, context_blocks, locate
 from .diff import lines as doc_lines
-from .stages import kind_of, pathway, track
+from .stages import OUTCOME_SHORT, kind_of, pathway, track
 
 HERE = Path(__file__).resolve().parent
 SITE_NAME = "Session Watch"
@@ -38,6 +38,10 @@ SHOWN_PROVISIONS = 10
 COUNTIES = ['Alachua', 'Baker', 'Bay', 'Bradford', 'Brevard', 'Broward', 'Calhoun', 'Charlotte', 'Citrus', 'Clay', 'Collier', 'Columbia', 'DeSoto', 'Dixie', 'Duval', 'Escambia', 'Flagler', 'Franklin', 'Gadsden', 'Gilchrist', 'Glades', 'Gulf', 'Hamilton', 'Hardee', 'Hendry', 'Hernando', 'Highlands', 'Hillsborough', 'Holmes', 'Indian River', 'Jackson', 'Jefferson', 'Lafayette', 'Lake', 'Lee', 'Leon', 'Levy', 'Liberty', 'Madison', 'Manatee', 'Marion', 'Martin', 'Miami-Dade', 'Monroe', 'Nassau', 'Okaloosa', 'Okeechobee', 'Orange', 'Osceola', 'Palm Beach', 'Pasco', 'Pinellas', 'Polk', 'Putnam', 'St. Johns', 'St. Lucie', 'Santa Rosa', 'Sarasota', 'Seminole', 'Sumter', 'Suwannee', 'Taylor', 'Union', 'Volusia', 'Wakulla', 'Walton', 'Washington']
 
 KIND_NAMES = {0: "plain", 1: "insert", 2: "delete"}
+# The order a reader thinks in: what passed, what did not, then the endings
+# that are rarer than either.
+OUTCOME_ORDER = ("became_law", "died", "superseded", "adopted", "vetoed",
+                 "pending", "to_ballot")
 SAFE_CITE = re.compile(r"^[0-9A-Za-z.]+$")
 
 
@@ -73,6 +77,17 @@ def money(amount) -> str:
 # which bill it is, so listings and browser tabs show the number alone.
 def short_label(label: str) -> str:
     return (label or "").rsplit("/", 1)[-1].strip()
+
+
+def _outcome_cards(counts) -> list[dict]:
+    """The dispositions a listing can filter by, in reading order.
+
+    An outcome with no bills behind it is left out rather than offered: a
+    filter that empties the table teaches the reader nothing, and an area
+    page holds a different set of endings from the session as a whole.
+    """
+    return [{"key": k, "label": OUTCOME_SHORT[k], "n": counts[k]}
+            for k in OUTCOME_ORDER if counts.get(k)]
 
 
 def _rows(db, sql, *args):
@@ -459,11 +474,7 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                                                  **common), encoding="utf-8")
 
     # ------------------------------------------------------- front and about
-    order = ["became_law", "died", "superseded", "adopted", "vetoed",
-             "pending", "to_ballot"]
-    from .stages import OUTCOME_SHORT
-    outcome_cards = [{"key": k, "label": OUTCOME_SHORT[k], "n": outcomes[k]}
-                     for k in order if outcomes.get(k)]
+    outcome_cards = _outcome_cards(outcomes)
     # the pre-rendered table is what a reader without JavaScript sees
     default_outcome = ("became_law" if outcomes.get("became_law")
                        else (outcome_cards[0]["key"] if outcome_cards else "all"))
@@ -480,9 +491,16 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     (out / "area").mkdir(parents=True, exist_ok=True)
     for a in AREAS:
         rows = sorted(by_area.get(a, []), key=lambda r: r["n"])
+        # Counted over this area, not the session: filtering Healthcare by
+        # "vetoed" must offer the number of vetoed healthcare bills or not
+        # offer it at all.
+        counts: dict = {}
+        for r in rows:
+            counts[r["o"]] = counts.get(r["o"], 0) + 1
         (out / "area" / f"{slug(a)}.html").write_text(
             env.get_template("area.html").render(
                 root="../", area=a, area_slug=slug(a), rows=rows,
+                outcomes=_outcome_cards(counts),
                 **common), encoding="utf-8")
 
     # --------------------------------------------------------- calendar

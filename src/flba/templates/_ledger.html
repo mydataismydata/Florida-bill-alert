@@ -11,6 +11,16 @@
   script serves both.
 #}
 
+{% macro filters(outcomes, active, all_noun) %}
+<div class="filters" id="filters">
+  {% for o in outcomes %}
+  <a href="#bills" data-outcome="{{ o.key }}" data-noun="{{ o.label }}"
+     title="{{ '{:,}'.format(o.n) }} bill{{ '' if o.n == 1 else 's' }}"{{ ' class=on'|safe if o.key == active }}>{{ o.label|upper }}</a>
+  {% endfor %}
+  <a href="#bills" data-outcome="all" data-noun="{{ all_noun }}"{{ ' class=on'|safe if active == 'all' }}>ALL</a>
+</div>
+{% endmacro %}
+
 {% macro table(rows, root) %}
 <table class="ledger" id="billtable">
   <thead><tr>

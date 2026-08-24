@@ -33,6 +33,7 @@
   </div>
   <div class="controls">
     <input type="search" id="q" placeholder="Search by number, title, or sponsor" autocomplete="off">
+    {{ ledger.filters(outcomes, 'all', area) }}
   </div>
 
 {{ ledger.table(rows, root) }}

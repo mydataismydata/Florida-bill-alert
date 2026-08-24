@@ -26,12 +26,7 @@
   </div>
   <div class="controls">
     <input type="search" id="q" placeholder="Search by number, title, or sponsor" autocomplete="off">
-    <div class="filters" id="filters">
-      {% for o in outcomes %}
-      <a href="#bills" data-outcome="{{ o.key }}"{{ ' class=on'|safe if o.key == default_outcome }}>{{ o.label|upper }}</a>
-      {% endfor %}
-      <a href="#bills" data-outcome="all">ALL</a>
-    </div>
+    {{ ledger.filters(outcomes, default_outcome, 'all bills') }}
   </div>
 
 {{ ledger.table(enacted, root) }}
