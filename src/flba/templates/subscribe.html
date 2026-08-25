@@ -61,7 +61,7 @@
         <div class="n">5</div><div class="k">AREAS OF INTEREST</div>
         <div class="f"><div class="grid3">
           {% for a in areas %}
-          <label><input type="checkbox" name="areas" value="{{ a.slug }}"><span class="box">✓</span>{{ a.name }}</label>
+          <label><input type="checkbox" name="areas[]" value="{{ a.slug }}"><span class="box">✓</span>{{ a.name }}</label>
           {% endfor %}
         </div></div>
       </div>
@@ -110,7 +110,7 @@
   if (q.get('email')) document.getElementById('email').value = q.get('email');
   var area = q.get('area');
   if (area) {
-    var box = document.querySelector('input[name=areas][value="' + area + '"]');
+    var box = document.querySelector('input[name="areas[]"][value="' + area + '"]');
     if (box) { box.checked = true; box.closest('label').scrollIntoView({block: 'center'}); }
   }
 })();
