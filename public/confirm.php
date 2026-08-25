@@ -36,7 +36,8 @@ db()->prepare('UPDATE subscriber SET confirmed_at=?, confirm_token=\'\', unsubsc
                 WHERE id=?')->execute([now(), $sub['id']]);
 
 page('Subscribed', '<div class="slabel">SUBSCRIBE</div>'
-    . '<p>Confirmed. You will hear from Session Watch when the Legislature does '
-    . 'something in the areas you chose.</p>'
+    . '<p>Thank you! You will receive brief daily updates during the active '
+    . 'session, along with weekly summaries. Your areas of interest will be '
+    . 'pulled to the top of the list.</p>'
     . '<p><a href="' . h(link_for($email, 'manage', 'manage.php')) . '">Change your settings</a> '
-    . 'at any time — every email carries the same link.</p>');
+    . 'at any time.</p>');
