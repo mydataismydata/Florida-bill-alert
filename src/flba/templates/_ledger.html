@@ -154,9 +154,9 @@
     if (th) { e.preventDefault(); sortBy(th); }
   });
 
-  function pick(el) {
-    outcome = el.getAttribute('data-outcome');
-    noun = (el.getAttribute('data-noun') || el.textContent).trim().toUpperCase();
+  function select(key, label) {
+    outcome = key;
+    noun = label;
     capped = true;
     if (filters) Array.prototype.forEach.call(filters.querySelectorAll('a'), function (a) {
       a.className = a.getAttribute('data-outcome') === outcome ? 'on' : '';
@@ -166,6 +166,12 @@
       a.className = 'cell' + (law ? ' law' : '') +
                     (a.getAttribute('data-outcome') === outcome ? ' on' : '');
     });
+  }
+  function labelOf(el) {
+    return (el.getAttribute('data-noun') || el.textContent).trim().toUpperCase();
+  }
+  function pick(el) {
+    select(el.getAttribute('data-outcome'), labelOf(el));
     draw();
   }
   [tiles, filters].forEach(function (host) {
@@ -177,7 +183,25 @@
   if (showall) showall.addEventListener('click', function (e) {
     e.preventDefault(); capped = false; draw();
   });
-  q.addEventListener('input', function () { capped = true; draw(); });
+  // A search is meant to reach the whole session, not whatever slice happened
+  // to be on screen. The home page opens on the bills that became law, so a
+  // reader searching from a cold start was silently looking at a tenth of the
+  // session and had no way to tell.
+  //
+  // Only the first keystroke moves the filter. Once they are searching, a
+  // disposition they pick has to survive the next keystroke, or refining the
+  // list would quietly undo itself as soon as they fixed a typo.
+  var wasEmpty = !q.value.trim();
+  q.addEventListener('input', function () {
+    var empty = !q.value.trim();
+    if (wasEmpty && !empty && outcome !== 'all') {
+      var all = filters && filters.querySelector('a[data-outcome="all"]');
+      select('all', all ? labelOf(all) : noun);
+    }
+    wasEmpty = empty;
+    capped = true;
+    draw();
+  });
   marks();
 })();
 </script>

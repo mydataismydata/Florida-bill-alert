@@ -780,3 +780,29 @@ def test_a_word_with_two_meanings_files_a_bill_by_the_right_one():
     for title in ("Autonomous Vehicle Safety",
                   "Delivery of Commercial Goods by Autonomous Vehicles"):
         assert classify(["316.003"], title) == "AI & Technology", title
+
+
+def test_a_search_reaches_the_whole_session_not_the_slice_on_screen(built):
+    """The home page opens filtered to the bills that became law.
+
+    A reader who typed into the search box was searching a tenth of the
+    session and had no way to tell -- the filter still said BECAME LAW, and a
+    bill that was not there looked like a bill that did not exist. The first
+    keystroke of a search has to widen the filter back to everything.
+    """
+    out, _ = built
+    script = (out / "index.html").read_text(encoding="utf-8")
+
+    # The first keystroke resets, and only the first: a disposition picked
+    # afterwards has to survive the next one, or refining undoes itself.
+    assert "wasEmpty" in script
+    assert "if (wasEmpty && !empty && outcome !== 'all')" in script
+    assert "select('all'" in script
+
+    # Every listing shares the macro, so none of them may drift from it.
+    for page in [out / "index.html",
+                 max((out / "area").glob("*.html"), key=lambda p: p.stat().st_size),
+                 max((out / "member").glob("*.html"), key=lambda p: p.stat().st_size)]:
+        text = page.read_text(encoding="utf-8")
+        assert "wasEmpty" in text, page.name
+        assert 'querySelector(\'a[data-outcome="all"]\')' in text, page.name
