@@ -381,6 +381,15 @@ input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
 input[type="checkbox"]:checked + .box,
 label.sel .box { border-color: var(--acc); color: var(--acc); }
 input[type="checkbox"]:focus-visible + .box { outline: 2px solid var(--acc); }
+/* Single-select "subscribing as": a round control, not the square tick box. */
+input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.radio { width: 14px; height: 14px; border: 1px solid var(--ink3); border-radius: 50%;
+  display: inline-block; vertical-align: -2px; margin-right: 9px; position: relative; }
+input[type="radio"]:checked + .radio { border-color: var(--acc); }
+input[type="radio"]:checked + .radio::after { content: ""; position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 6px; height: 6px; border-radius: 50%; background: var(--acc); }
+input[type="radio"]:focus-visible + .radio { outline: 2px solid var(--acc); }
 
 /* the numbered form */
 .formledger { margin: 26px 0 0; border-top: 2px solid var(--ru); }
