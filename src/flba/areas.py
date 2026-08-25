@@ -68,7 +68,12 @@ _CHAPTERS: list[tuple[str, list[tuple[int, int]]]] = [
 _TITLE_RULES: list[tuple[str, re.Pattern]] = [
     ("AI & Technology", re.compile(
         r"\b(artificial intelligence|machine learning|algorithm\w*|"
-        r"autonomous|deepfake|generative|chatbot|social media platform|"
+        # "Autonomous" on its own is a licensure word before it is a technical
+        # one -- "Autonomous Practice" is a nurse's scope, not a machine's --
+        # so it only counts when it is driving something.
+        r"autonomous (?=vehicle|vessel|aircraft|drone|robot|system|"
+        r"technolog|deliver|truck)|"
+        r"deepfake|generative|chatbot|social media platform|"
         r"data centers?|cryptocurrenc\w+|digital asset\w*|blockchain)\b", re.I)),
     ("Elections",       re.compile(r"\b(election|ballot|votin|voter|redistrict)\w*\b", re.I)),
     ("Education",       re.compile(r"\b(school|student|charter school|university|"

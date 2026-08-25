@@ -761,3 +761,22 @@ def test_a_member_name_cannot_walk_out_of_its_directory(built):
     assert pages
     for page in pages:
         assert re.fullmatch(r"[a-z0-9-]+", page.stem), page.stem
+
+
+def test_a_word_with_two_meanings_files_a_bill_by_the_right_one():
+    """"Autonomous" is a licensure word before it is a technical one.
+
+    Four nurse scope-of-practice bills sat on the AI & Technology page for
+    the whole session because their titles said "Autonomous Practice", and a
+    bill on the wrong area page reads exactly like a bill on the right one.
+    """
+    from flba.areas import classify
+
+    for title in ("Advanced Practice Registered Nurse Autonomous Practice",
+                  "Autonomous Practice by a Certified Registered Nurse "
+                  "Anesthetist"):
+        assert classify(["464.0123"], title) == "Healthcare", title
+
+    for title in ("Autonomous Vehicle Safety",
+                  "Delivery of Commercial Goods by Autonomous Vehicles"):
+        assert classify(["316.003"], title) == "AI & Technology", title
