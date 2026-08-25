@@ -79,6 +79,18 @@ def short_label(label: str) -> str:
     return (label or "").rsplit("/", 1)[-1].strip()
 
 
+def member_slug(name: str) -> str:
+    """URL form of a member's name: 'Susan Valdés' -> 'susan-valdes'.
+
+    Accents are folded rather than stripped, so a path never carries a stray
+    hyphen where a letter should be, and nothing but letters, digits and
+    hyphens survives -- a name cannot walk out of the directory it is
+    written into.
+    """
+    from .finance import fold
+    return re.sub(r"[^a-z0-9]+", "-", fold(name or "").lower()).strip("-")
+
+
 def _outcome_cards(counts) -> list[dict]:
     """The dispositions a listing can filter by, in reading order.
 
@@ -254,10 +266,6 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
 
     committees = {r["name"] for r in
                   _rows(db, "SELECT DISTINCT name FROM committee_ref")}
-    # Keyed by the member page URL, which is what a bill row already carries.
-    members_by_url = {r["url"]: dict(r) for r in
-                      _rows(db, "SELECT * FROM member")}
-
     # Who each sponsor actually is, matched by `flba finance` before the
     # build: full name, district, party, and a link to their filings where
     # there are any. A corpus ingested before this existed has no table at
@@ -267,6 +275,11 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         sponsors = {(r["chamber"], r["token"]): dict(r) for r in
                     _rows(db, "SELECT * FROM sponsor_finance"
                               " WHERE session=? AND member_name<>''", session)}
+
+    # Every bill a member filed, for the page that answers "what else have
+    # they put their name to". Keyed the way a sponsor token is: one person
+    # per chamber.
+    by_member: dict[tuple, list] = {}
 
     history: dict[int, list] = {}
     for r in _rows(db, "SELECT num,date,chamber,action FROM history"
@@ -347,16 +360,18 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
 
         area = classify([r["statute"] for r in refs], b["title"] or "")
         _panels, members = split_sponsor(b["sponsor"] or "", committees)
-        member = members_by_url.get(b["sponsor_url"] or "")
         # The sponsor row stays the chamber's own wording. Everything we have
         # added to it -- the person's full name, their seat, their filings --
         # belongs on the line that names the people, not the raw field.
         filed_by = [
-            dict(sponsors.get((b["chamber"], token)) or {},
-                 token=token,
-                 # Only one member can be meant by the bill's own link.
-                 page=member["url"] if member and len(members) == 1 else "")
+            dict(sponsors.get((b["chamber"], token)) or {}, token=token)
             for token in members]
+        for f in filed_by:
+            # The name leads to their own page here rather than out to the
+            # chamber's site: what a reader wants next is the rest of what
+            # this person filed, and the official page is one click on from
+            # there.
+            f["slug"] = member_slug(f["member_name"]) if f.get("member_name") else ""
         # The listing names whoever filed the bill whatever else the page
         # carries, so the names are taken before the row below is thinned out.
         filed_names = ([f.get("member_name") or f["token"] for f in filed_by]
@@ -370,13 +385,13 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         # A row that repeats the sponsor field word for word is noise. It
         # earns its place by naming the person a committee chain hides, or by
         # carrying a seat, a party or a link the field above does not.
-        if not (_panels or any(f.get("district") or f.get("url") or f.get("page")
+        if not (_panels or any(f.get("district") or f.get("url") or f.get("slug")
                                for f in filed_by)):
             filed_by = []
         html = env.get_template("bill.html").render(
             root="../", b=b, p=prog, path=pathway(prog), refs=refs,
             members=members, sponsor_has_committees=bool(_panels),
-            member=member, filed_by=filed_by,
+            filed_by=filed_by,
             area=area, area_slug=slug(area),
             shown_provisions=SHOWN_PROVISIONS,
             blocks=blocks, total_blocks=len(all_blocks),
@@ -403,6 +418,10 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         if b["chapter_law"]:
             row["d"] = f"LAW · {b['chapter_law']}"
         index_rows.append(row)
+        for f in filed_by:
+            if f.get("member_name"):
+                by_member.setdefault(
+                    (b["chamber"], f["token"], f["member_name"]), []).append(row)
         by_area.setdefault(area, []).append(row)
         by_area_of[b["num"]] = area
         if b["chapter_law"]:
@@ -501,6 +520,36 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
             env.get_template("area.html").render(
                 root="../", area=a, area_slug=slug(a), rows=rows,
                 outcomes=_outcome_cards(counts),
+                **common), encoding="utf-8")
+
+    # ----------------------------------------------------------- members
+    # One page per person who filed something, so the name on a bill leads to
+    # the rest of their record rather than off the site.
+    (out / "member").mkdir(parents=True, exist_ok=True)
+    seen_slugs: dict[str, tuple] = {}
+    for (chamber, token, name), rows in sorted(by_member.items()):
+        who = sponsors.get((chamber, token)) or {}
+        stub = member_slug(name)
+        if not stub:
+            continue
+        if stub in seen_slugs:
+            # Two people cannot share a page. Nothing in the 2026 rosters
+            # collides, and if a session ever does this says so instead of
+            # quietly publishing one member's bills under another's name.
+            raise SystemExit(f"two members share the URL {stub}: "
+                             f"{seen_slugs[stub]} and {(chamber, token)}")
+        seen_slugs[stub] = (chamber, token)
+        rows = sorted(rows, key=lambda r: r["n"])
+        counts: dict = {}
+        for r in rows:
+            counts[r["o"]] = counts.get(r["o"], 0) + 1
+        (out / "member" / f"{stub}.html").write_text(
+            env.get_template("member.html").render(
+                root="../", name=name, chamber=chamber,
+                district=who.get("district"), party=who.get("party", ""),
+                official=who.get("member_url", ""), donations=who.get("url", ""),
+                rows=rows, outcomes=_outcome_cards(counts),
+                enacted=counts.get("became_law", 0),
                 **common), encoding="utf-8")
 
     # --------------------------------------------------------- calendar

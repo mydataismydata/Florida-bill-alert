@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS sponsor_finance (
     district INTEGER, party TEXT,
     person_name TEXT,       -- as the filings write it, '' when unmatched
     url TEXT,               -- '' when there is no filing to link to
+    member_url TEXT DEFAULT '',   -- their page on the chamber's own site
     total_received TEXT, total_given TEXT,
     filings INTEGER, same_surname INTEGER,
     checked_at TEXT DEFAULT (datetime('now')),
@@ -171,7 +172,8 @@ class Store:
 
     # CREATE TABLE IF NOT EXISTS leaves an existing table alone, so a column
     # added later never reaches a database that predates it.
-    _ADDED = (("member", "nickname", "TEXT DEFAULT ''"),)
+    _ADDED = (("member", "nickname", "TEXT DEFAULT ''"),
+              ("sponsor_finance", "member_url", "TEXT DEFAULT ''"))
 
     def _add_missing_columns(self) -> None:
         for table, column, decl in self._ADDED:
@@ -280,11 +282,13 @@ class Store:
         self.db.execute(
             "INSERT OR REPLACE INTO sponsor_finance"
             " (session,chamber,token,member_name,district,party,person_name,"
-            "  url,total_received,total_given,filings,same_surname,checked_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
+            "  url,member_url,total_received,total_given,filings,same_surname,"
+            "  checked_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
             (session, chamber, token, rec.get("member_name", ""),
              rec.get("district"), rec.get("party", ""),
              rec.get("person_name", ""), rec.get("url", ""),
+             rec.get("member_url", ""),
              rec.get("total_received", ""), rec.get("total_given", ""),
              rec.get("filings", 0), rec.get("same_surname", 0)))
         self.db.execute("COMMIT")

@@ -748,7 +748,11 @@ def cmd_finance(args) -> int:
             searchable = f'{searchable} "{member["nickname"]}"'
         found = tracker.resolve(searchable)
         rec = {"member_name": display_name(member["name"]),
-               "district": member["district"], "party": member["party"]}
+               "district": member["district"], "party": member["party"],
+               # Where the chamber itself publishes them. Both rosters carry
+               # it and neither bill record does, so this is the only pass
+               # that can pick it up.
+               "member_url": member.get("url", "")}
         if found:
             linked += 1
             rec |= {"person_name": found["name"], "url": found["url"],

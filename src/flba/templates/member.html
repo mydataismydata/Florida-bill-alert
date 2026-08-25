@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import "_ledger.html" as ledger %}
+{% block title %}{{ name }} — bills filed · {{ site_name }}{% endblock %}
+{% block description %}Every bill {{ name }} filed in the {{ session }} Florida legislative session.{% endblock %}
+{% block masthead %}
+<header class="masthead compact">
+  <div class="wordmark"><a href="{{ root }}index.html">SESSION WATCH</a></div>
+  <nav>
+    <a href="{{ root }}index.html" class="on">BILLS</a>
+    <a href="{{ root }}calendar.html">CALENDAR</a>
+    <a href="{{ root }}about.html">ABOUT</a>
+    <a href="{{ root }}subscribe.html">SUBSCRIBE</a>
+    <button type="button" class="theme-toggle" data-theme-toggle>DARK MODE</button>
+  </nav>
+</header>
+{% endblock %}
+{% block body %}
+<section class="pagehead">
+  <div style="font:400 10px var(--mono);letter-spacing:.3em;color:var(--ink3)">FILED BY</div>
+  <h1>{{ name }}</h1>
+  <div class="seat">{{ chamber|upper }}{% if district %} · DISTRICT {{ district }} · {{ party|upper }}{% endif %}</div>
+</section>
+
+<section class="wrap" style="padding-top:24px" id="bills">
+  {# Bills they filed. Signing on to someone else's is cosponsoring, which is
+     a different thing and is not counted here. #}
+  <div class="areastrip" style="margin-top:0">
+    <p>{{ '{:,}'.format(rows|length) }} bill{{ '' if rows|length == 1 else 's' }} filed in
+       the {{ session }} session{% if enacted %}, {{ enacted }} of which became law{% endif %}.</p>
+    <div class="offsite">
+      {% if official %}<a href="{{ official }}" target="_blank" rel="noopener">Official page →</a>{% endif %}
+      {% if donations %}<a href="{{ donations }}" target="_blank" rel="noopener"
+         title="Campaign filings for {{ name }}">Search donations →</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="ledger-head" style="margin-top:28px">
+    <h2>The record of bills</h2>
+    <div class="count" id="hint">SHOWING {{ '{:,}'.format(rows|length) }} — FILED</div>
+  </div>
+  <div class="controls">
+    <input type="search" id="q" placeholder="Search by number, title, or sponsor" autocomplete="off">
+    {{ ledger.filters(outcomes, 'all', 'filed') }}
+  </div>
+
+{{ ledger.table(rows, root) }}
+</section>
+
+{{ ledger.script(rows, root, 'filed') }}
+{% endblock %}

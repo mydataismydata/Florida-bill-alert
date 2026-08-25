@@ -238,6 +238,13 @@ footer.site a { color: var(--acc2); }
   table.ledger td.disp { width: auto; }
 }
 
+/* --------------------------------------------------------- member page */
+.pagehead .seat { margin: 10px 0 0; font: 500 11px var(--mono);
+  letter-spacing: .16em; color: var(--ink3); }
+.areastrip .offsite { display: flex; gap: 18px; flex-wrap: wrap;
+  font: 500 11.5px var(--mono); letter-spacing: .06em; }
+.areastrip .offsite a { color: var(--acc); white-space: nowrap; }
+
 /* Four columns is one too many for a phone, and the title is the column a
    reader came for. The sponsor is still on the bill's own page. */
 @media (max-width: 700px) {

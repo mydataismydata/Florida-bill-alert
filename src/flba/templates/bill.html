@@ -42,7 +42,8 @@
     <div class="row"><div class="k">FILED BY</div><div class="v">
       {% for m in filed_by %}
       <div class="filer">
-        {%- if m.page %}<a href="{{ m.page }}" target="_blank" rel="noopener">{{ m.member_name or m.token }}</a>
+        {%- if m.slug %}<a href="{{ root }}member/{{ m.slug }}.html"
+          title="Everything {{ m.member_name }} filed this session">{{ m.member_name }}</a>
         {%- else %}{{ m.member_name or m.token }}{% endif %}
         {%- if m.district %} — District {{ m.district }}, {{ m.party }}{% endif %}
         {%- if m.url %} <a class="donations" href="{{ m.url }}" target="_blank"

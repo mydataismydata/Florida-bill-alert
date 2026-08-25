@@ -406,7 +406,7 @@ def test_a_chapter_pill_without_a_url_is_not_a_link(built):
 
 # --- who filed it ----------------------------------------------------------
 
-def test_a_senate_sponsor_carries_a_link_district_and_party(built):
+def test_a_sponsor_links_to_their_own_record_not_off_the_site(built):
     from bs4 import BeautifulSoup
     out, _ = built
     found = 0
@@ -424,8 +424,12 @@ def test_a_senate_sponsor_carries_a_link_district_and_party(built):
                   if "donations" not in (x.get("class") or [])), None)
         if not a:
             continue
-        assert "/Senators/" in a["href"]
-        assert a["target"] == "_blank"
+        # It used to open the chamber's own page. What a reader wants next is
+        # the rest of what this person filed, and the chamber's page is one
+        # click on from there.
+        assert a["href"].startswith("../member/"), a["href"]
+        assert "target" not in a.attrs, "a page on this site opens in place"
+        assert (page.parent / a["href"]).resolve().exists(), a["href"]
         text = row.select_one(".v").get_text(" ", strip=True)
         assert "District" in text, text
         found += 1
@@ -588,9 +592,9 @@ def test_both_listings_offer_the_same_search_and_sorting(built):
     """An area page is the same ledger over fewer bills, so it gets the same
     controls -- a reader who learns one has learned the other."""
     out, _ = built
-    area = max((out / "area").glob("*.html"),
-               key=lambda p: len(_listing(p).select("#billtable tbody tr")))
-    for page in (out / "index.html", area):
+    widest = lambda d: max(d.glob("*.html"),
+                           key=lambda p: len(_listing(p).select("#billtable tbody tr")))
+    for page in (out / "index.html", widest(out / "area"), widest(out / "member")):
         soup = _listing(page)
         cols = [th["data-sort"] for th in soup.select("#billtable thead th[data-sort]")]
         assert cols == ["n", "t", "f", "d"], f"{page.name}: {cols}"
@@ -656,7 +660,8 @@ def test_every_disposition_filter_offered_can_actually_match_something(built):
     A filter that empties the table is worse than an absent one: the reader
     learns nothing from it and cannot tell a bug from a fact."""
     out, _ = built
-    pages = [out / "index.html", *sorted((out / "area").glob("*.html"))]
+    pages = [out / "index.html", *sorted((out / "area").glob("*.html")),
+             *sorted((out / "member").glob("*.html"))]
     checked = 0
     for page in pages:
         soup = _listing(page)
@@ -672,3 +677,51 @@ def test_every_disposition_filter_offered_can_actually_match_something(built):
             f"{page.name}: exactly one filter must start active")
         checked += 1
     assert checked > 1, "no area page carried a filter strip"
+
+
+def _member_links(out):
+    """Which bills name which member, read off the bill pages themselves."""
+    from bs4 import BeautifulSoup
+    filed: dict = {}
+    for page in (out / "bills").glob("*.html"):
+        if page.stem.endswith(SUBPAGES):
+            continue
+        soup = BeautifulSoup(page.read_text(encoding="utf-8"), "html.parser")
+        for a in soup.select('.factledger .row .v a[href^="../member/"]'):
+            filed.setdefault(a["href"].split("/")[-1], set()).add(int(page.stem))
+    return filed
+
+
+def test_a_member_page_lists_every_bill_that_names_them_and_no_others(built):
+    """The link on a bill and the listing on the member's page are two views
+    of one fact, so they cannot be allowed to disagree."""
+    out, _ = built
+    filed = _member_links(out)
+    assert filed, "no bill named a member"
+    for name, nums in filed.items():
+        soup = _listing(out / "member" / name)
+        listed = {r["n"] for r in json.loads(soup.select_one("#rows").string)}
+        assert listed == nums, f"{name}: {sorted(listed ^ nums)}"
+
+
+def test_a_member_page_says_whose_it_is_and_where_else_to_look(built):
+    out, _ = built
+    for name in _member_links(out):
+        soup = _listing(out / "member" / name)
+        assert soup.h1.get_text(strip=True), f"{name} has no name on it"
+        # The chamber's own page is still reachable, one click on rather than
+        # in place of the record.
+        offsite = [a["href"] for a in soup.select(".offsite a")]
+        assert any("flsenate.gov" in h or "flhouse.gov" in h for h in offsite), (
+            f"{name} lost the link to the chamber's page: {offsite}")
+
+
+def test_a_member_name_cannot_walk_out_of_its_directory(built):
+    """A name reaches a path here, and some of them carry accents, dots and
+    apostrophes."""
+    import re
+    out, _ = built
+    pages = list((out / "member").glob("*.html"))
+    assert pages
+    for page in pages:
+        assert re.fullmatch(r"[a-z0-9-]+", page.stem), page.stem
