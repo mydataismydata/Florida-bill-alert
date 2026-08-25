@@ -206,6 +206,13 @@ table.ledger td.no a { color: var(--acc); }
 table.ledger td.title { font-size: 15.5px; }
 table.ledger td.filed { width: 230px; font: 400 12.5px var(--mono);
   color: var(--ink2); }
+/* The number is the row's primary link and carries the accent colour. A
+   filer is marked more quietly than that, but still has to read as
+   clickable sitting still and not only under the pointer. */
+table.ledger td.filed a { color: inherit; text-underline-offset: 3px;
+  text-decoration: underline dotted var(--ru); }
+table.ledger td.filed a:hover { color: var(--acc);
+  text-decoration: underline solid var(--acc); }
 table.ledger td.disp { width: 180px; font: 400 11.5px var(--mono); color: var(--ink2); }
 .more { padding: 14px 4px; text-align: center; font: 500 11.5px var(--mono);
   letter-spacing: .1em; }

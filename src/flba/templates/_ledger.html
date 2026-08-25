@@ -33,7 +33,13 @@
     <tr>
       <td class="no"><a href="{{ root }}bills/{{ b.n }}.html">{{ b.l }}</a></td>
       <td class="title">{{ b.t }}</td>
-      <td class="filed">{{ b.f }}</td>
+      <td class="filed">
+        {%- for who, stub in b.m -%}
+        {{ '; ' if not loop.first }}
+        {%- if stub %}<a href="{{ root }}member/{{ stub }}.html">{{ who }}</a>
+        {%- else %}{{ who }}{% endif %}
+        {%- endfor -%}
+      </td>
       <td class="disp">{{ b.d }}</td>
     </tr>{% endfor %}</tbody>
 </table>
@@ -66,8 +72,9 @@
     if (!t) return true;
     // r.s carries the number as the Legislature writes it, so a reader who
     // pastes "CS/CS/SB 36" still finds the bill the column shows as "SB 36".
-    return (r.l + ' ' + r.t + ' ' + (r.f || '') + ' ' + (r.s || ''))
-             .toLowerCase().indexOf(t) >= 0;
+    // It carries the filers' names too, which is why they are not repeated
+    // here.
+    return (r.l + ' ' + r.t + ' ' + (r.s || '')).toLowerCase().indexOf(t) >= 0;
   }
 
   // Two columns do not sort on the text they show. FILED BY reads "Ana Maria
@@ -90,6 +97,15 @@
     return (x < y ? -1 : x > y ? 1 : 0) * dir || a.n - b.n;
   }
 
+  // A committee files bills and has no page, so it is named without a link
+  // rather than pointed at one that is not there.
+  function filers(r) {
+    return (r.m || []).map(function (who) {
+      return who[1] ? '<a href="' + ROOT + 'member/' + esc(who[1]) + '.html">' +
+                      esc(who[0]) + '</a>' : esc(who[0]);
+    }).join('; ');
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;')
       .replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -102,7 +118,7 @@
       var r = shown[i];
       html += '<tr><td class="no"><a href="' + ROOT + 'bills/' + r.n + '.html">' +
               esc(r.l) + '</a></td><td class="title">' + esc(r.t) +
-              '</td><td class="filed">' + esc(r.f) + '</td><td class="disp">' +
+              '</td><td class="filed">' + filers(r) + '</td><td class="disp">' +
               esc(r.d) + '</td></tr>';
     }
     body.innerHTML = html || '<tr><td colspan="4" class="title" style="padding:22px 4px;color:var(--ink3)">No bills match.</td></tr>';

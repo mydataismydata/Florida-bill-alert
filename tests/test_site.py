@@ -579,8 +579,44 @@ def test_every_listed_bill_names_who_filed_it(built):
     out, _ = built
     idx = json.loads((out / "search-index.json").read_text())
     for r in idx:
-        assert r["f"], f"bill {r['n']} lists nobody"
+        assert r["m"], f"bill {r['n']} lists nobody"
+        assert all(who for who, _ in r["m"]), f"bill {r['n']} has a blank filer"
         assert r["k"], f"bill {r['n']} has nothing to sort on"
+
+
+def test_a_filer_in_the_listing_links_to_their_page_and_a_committee_does_not(built):
+    """A committee files bills and has no page. Guessing a slug from its name
+    would produce a link indistinguishable from a working one."""
+    out, _ = built
+    idx = json.loads((out / "search-index.json").read_text())
+    people = committees = 0
+    for r in idx:
+        for who, stub in r["m"]:
+            if stub:
+                assert (out / "member" / f"{stub}.html").exists(), (
+                    f"bill {r['n']} points at a member page that is not built: {stub}")
+                people += 1
+            else:
+                committees += 1
+    assert people, "nobody in the listing links anywhere"
+
+
+def test_the_listing_renders_those_links_in_the_html_it_ships(built):
+    """The server-rendered table is what a reader without javascript sees, so
+    the links have to be in it and not only in the script that redraws it."""
+    out, _ = built
+    for page in (out / "index.html", *sorted((out / "area").glob("*.html"))):
+        soup = _listing(page)
+        cells = soup.select("#billtable td.filed")
+        if not cells:
+            continue
+        linked = [a for c in cells for a in c.select("a")]
+        assert linked, f"{page.name}: no filer is clickable"
+        for a in linked:
+            assert a["href"].startswith(("member/", "../member/")), a["href"]
+            assert (page.parent / a["href"]).resolve().exists(), a["href"]
+        return
+    pytest.fail("no listing rendered a filer")
 
 
 def _listing(path):

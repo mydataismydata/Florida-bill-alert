@@ -372,10 +372,13 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
             # this person filed, and the official page is one click on from
             # there.
             f["slug"] = member_slug(f["member_name"]) if f.get("member_name") else ""
-        # The listing names whoever filed the bill whatever else the page
-        # carries, so the names are taken before the row below is thinned out.
-        filed_names = ([f.get("member_name") or f["token"] for f in filed_by]
-                       or _panels)
+        # Who the listing names, and where each of them has a page. Taken
+        # before the row below is thinned out, and paired rather than
+        # derived: a committee has no page, and a slug guessed from a name
+        # that has none is a 404 that looks exactly like a link.
+        filed_who = ([[f.get("member_name") or f["token"], f.get("slug", "")]
+                      for f in filed_by] or [[p, ""] for p in _panels])
+        filed_names = [name for name, _ in filed_who]
         # What that column sorts on. It reads "Ana Maria Rodriguez" and a
         # reader looking for her is looking under R, so it sorts by surname --
         # which the sponsor token already is, rather than the last word of a
@@ -404,8 +407,7 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
 
         row = {
             "n": b["num"], "l": short_label(b["label"]),
-            "t": (b["title"] or "")[:120], "f": "; ".join(filed_names),
-            "k": filed_key,
+            "t": (b["title"] or "")[:120], "m": filed_who, "k": filed_key,
             "o": prog.outcome, "d": prog.outcome_label.upper(),
             "a": area or "",
             # The number as the Legislature writes it stays searchable even
