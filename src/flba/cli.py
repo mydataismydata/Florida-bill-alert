@@ -884,11 +884,16 @@ def cmd_analyze(args) -> int:
             # touches and from its title, the same way the site files it, so
             # asking for one here and reading one there cannot disagree.
             from .areas import AREAS, classify, slug
-            want = next((a for a in AREAS
-                         if args.area.lower() in (a.lower(), slug(a))), None)
-            if want is None:
+            # "none" is the bills the statutes and the title both leave
+            # unfiled -- 326 of them this session. They are a real bucket, and
+            # without a name for it there is no way to ask for them at all.
+            unfiled = args.area.lower() in ("none", "unfiled")
+            want = None if unfiled else next(
+                (a for a in AREAS
+                 if args.area.lower() in (a.lower(), slug(a))), None)
+            if want is None and not unfiled:
                 print(f"unknown area: {args.area}\n  one of: "
-                      + ", ".join(AREAS), file=sys.stderr)
+                      + ", ".join(AREAS) + ", none", file=sys.stderr)
                 return 2
             cites: dict[int, list] = {}
             for r in db.execute("SELECT num,statute FROM statute_ref"
@@ -1026,7 +1031,8 @@ def main(argv=None) -> int:
                             help="only bills filed in one chamber")
             sp.add_argument("--area",
                             help="only one area, by name or slug, e.g. "
-                                 "'AI & Technology' or ai-technology")
+                                 "'AI & Technology' or ai-technology; "
+                                 "'none' for the bills no area claims")
             sp.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
             sp.add_argument("--model",
                             default="mlx-community/Qwen3.8-27B-4bit")
