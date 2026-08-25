@@ -870,6 +870,32 @@ def cmd_analyze(args) -> int:
                 "SELECT num FROM bill WHERE session=? AND chapter_law<>''",
                 (args.session,))}
             nums = [n for n in nums if n in enacted]
+        if args.chamber:
+            in_chamber = {r["num"] for r in db.execute(
+                "SELECT num FROM bill WHERE session=? AND chamber=?",
+                (args.session, args.chamber))}
+            nums = [n for n in nums if n in in_chamber]
+        if args.area:
+            # Not a column either. An area is read from the statutes a bill
+            # touches and from its title, the same way the site files it, so
+            # asking for one here and reading one there cannot disagree.
+            from .areas import AREAS, classify, slug
+            want = next((a for a in AREAS
+                         if args.area.lower() in (a.lower(), slug(a))), None)
+            if want is None:
+                print(f"unknown area: {args.area}\n  one of: "
+                      + ", ".join(AREAS), file=sys.stderr)
+                return 2
+            cites: dict[int, list] = {}
+            for r in db.execute("SELECT num,statute FROM statute_ref"
+                                " WHERE session=?", (args.session,)):
+                cites.setdefault(r["num"], []).append(r["statute"])
+            in_area = {b["num"] for b in
+                       db.execute("SELECT num,title FROM bill WHERE session=?",
+                                  (args.session,))
+                       if classify(cites.get(b["num"], []),
+                                   b["title"] or "") == want}
+            nums = [n for n in nums if n in in_area]
         if args.limit:
             nums = nums[:args.limit]
 
@@ -992,6 +1018,11 @@ def main(argv=None) -> int:
                             help="only bills that became law")
             sp.add_argument("--vetoed", action="store_true",
                             help="only bills the Governor vetoed")
+            sp.add_argument("--chamber", choices=["House", "Senate"],
+                            help="only bills filed in one chamber")
+            sp.add_argument("--area",
+                            help="only one area, by name or slug, e.g. "
+                                 "'AI & Technology' or ai-technology")
             sp.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
             sp.add_argument("--model",
                             default="mlx-community/Qwen3.8-27B-4bit")
