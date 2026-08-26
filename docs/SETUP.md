@@ -1,9 +1,9 @@
 # Setup
 
 Two independent halves. The **ingest** side needs only Python and works today.
-The **analysis** side needs a local model and is where MLX comes in.
+The **analysis** side needs a local model.
 
-## 1. Ingest (works now)
+## 1. Ingest
 
 ```bash
 python3.11 -m venv .venv
@@ -22,7 +22,7 @@ $P -m flba --session 2026 status             # what we have
 
 ### Run the backfill in chunks, not marathons
 
-Nothing needs a days-long run. Every stage is resumable and skips what is
+Every stage is resumable and skips what is
 already cached, so `--limit` is a clean stopping point:
 
 ```bash
@@ -50,8 +50,7 @@ $P -m flba --session 2026 bill 797 "HB 33" 1452 --with-docs
 $P -m flba --session 2026 bill 797 --cached     # reparse, no network
 ```
 
-This is safe to run while a backfill is going. Two things make that true, and
-both were bugs first:
+This is safe to run while a backfill is going:
 
 - The one-request-per-second crawl delay is held in a **lock file shared across
   processes**, not a per-process timer, so two jobs together still total 1 req/s.
@@ -60,21 +59,9 @@ both were bugs first:
 
 ## 2. Analysis (MLX)
 
-### Why MLX rather than Ollama
-
-Ollama wraps llama.cpp and is the easier on-ramp, but MLX is Apple's own array
-framework and gets first-class treatment on Apple Silicon — better memory
-behaviour on unified RAM and faster support for new architectures. For a
-pipeline that will re-read a 1,900-bill corpus every time a prompt changes,
-that difference compounds.
-
-Keep Ollama installed anyway. It is a useful second backend for cross-checking
-that a prompt is not overfitted to one runtime.
-
 ### Install
 
-`Qwen3.8-27B` is a **vision-language** model, so it needs `mlx-vlm`, not
-`mlx-lm`. That trips people up.
+`Qwen3.8-27B` is a **vision-language** model, so it needs `mlx-vlm`.
 
 ```bash
 ./.venv/bin/pip install -U mlx-vlm      # vision-language models (Qwen3.8-27B)
@@ -84,8 +71,7 @@ that a prompt is not overfitted to one runtime.
 ### Model
 
 Default: **`mlx-community/Qwen3.8-27B-4bit`** — dense, Apache-2.0, 16.1 GB on
-disk. On 64 GB of unified memory that leaves ample room for a large KV cache,
-which is what actually constrains long-bill work.
+disk.
 
 ```bash
 ./.venv/bin/python -m mlx_vlm.generate \
@@ -116,32 +102,23 @@ staff analyses are PDFs whose layout resists text extraction. A VLM can read a
 rendered page directly. Use it as a *fallback and cross-check*, never as the
 primary path — the geometric PDF parser (see [INGEST-NOTES.md](INGEST-NOTES.md))
 is deterministic and cheap, and determinism is the whole point of the diff
-layer. Vision is for the cases geometry cannot reach.
+layer.
 
 ### Portability
 
-The analysis box may not stay this machine. Everything model-specific therefore
-sits behind one interface — `analyze(bill) -> AnalysisBundle` — with named
+Everything model-specific therefore sits behind one interface — `analyze(bill) -> AnalysisBundle` — with named
 profiles (`tiny-3b`, `local-27b`, `cloud`) selecting model, chunk size, and
 pass count. Moving to a weaker box should mean changing a profile name, not
 touching the pipeline. Cloud API access is just another profile.
 
-## 3. Publishing
-
-Not built yet. The analysis box renders a static bundle and pushes it one-way
-to the public host over SSH; the public server runs no model and never
-initiates a connection inward. See [FEASIBILITY.md](FEASIBILITY.md) §3.
-
-## 4. Building and publishing the site
+## 3. Building and publishing the site
 
 ```bash
 $P -m flba --session 2026 crossref     # index statutes + changes (offline)
 $P -m flba --session 2026 build        # render the static site
 ```
 
-Output lands in `site/` — for the 2026 session that is **1,897 bill pages,
-4,011 statute pages, 5,913 files, about 32 MB**. Comfortable on shared hosting,
-and small enough that a rebuild takes under two minutes.
+Output lands in `site/`.
 
 Preview locally:
 
@@ -151,8 +128,7 @@ $P -m http.server 8791 --directory site
 
 The site is deliberately plain: no JavaScript frameworks, no webfonts, no
 analytics, and **no external requests of any kind**. It works with JavaScript
-disabled apart from the search box, prints legibly (legislative offices print
-things), and follows the reader's light or dark preference.
+disabled apart from the search box, prints legibly and follows the reader's light or dark preference.
 
 ### Publishing
 
@@ -176,8 +152,7 @@ ssh-copy-id -i ~/.ssh/ionos.pub u12345678@access.example.com
 ```
 
 **Only what changed travels.** The site is regenerated from templates, so every
-file's timestamp moves on every build even when its bytes do not — which is why
-this compares content, not times. A rebuild after one bill's analysis ships
+file's timestamp moves on every build even when its bytes do not. A rebuild after one bill's analysis ships
 three files, not 9,731. The first push is the whole site; after that a manifest
 in `.deploy/` records what the server holds.
 
@@ -218,7 +193,7 @@ python scripts/serve_local.py
 
 Then open <http://127.0.0.1:8791>. The button posts to the small server in
 `scripts/serve_local.py`, which runs the analyzer for that one bill and
-rebuilds its pages -- about a minute, and the page reloads itself when it is
+rebuilds its pages in about a minute, and the page reloads itself when it is
 done. With JavaScript off the same button still works; it just redirects
 instead of reporting progress.
 
@@ -303,7 +278,4 @@ flba --session 2026 finance --base-url http://localhost:3111
 `--base-url` is where the answers come from; `--public-url` is where readers
 are sent, and it defaults to the public host either way.
 
-**These links depend on PAC Tracker's `/person/` route being deployed.** It
-serves on a local instance today but returns 404 on pactrack.sjcrlc.org, so the
-links are correct but dead until that release ships. Nothing needs changing
-here when it does.
+**These links depend on PAC Tracker's `/person/` route being deployed.**
