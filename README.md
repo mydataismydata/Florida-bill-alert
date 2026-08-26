@@ -3,21 +3,20 @@
 A free, open-source legislation tracker for the Florida Legislature.
 
 It follows bills as they are filed, shows clearly how far along the process each
-one is, and publishes a plain-English summary alongside the important
-provisions, a forward-looking read of how the bill's language could be used, and
+one is, and publishes an AI-analyzed plain-English summary and provisions, a forward-looking read of how the bill's language could be used, and
 an independent cost analysis cross-referenced against the sponsor's own fiscal
 estimates.
 
 **Who it's for:** legislators who have to vote on bills they haven't had time to
-read, activists petitioning those legislators, and anyone trying to follow what
+read, local county and school board directors looking to keep abreast of pending impacts, concerned citizens and anyone trying to follow what
 is actually happening in Tallahassee.
 
 ## How it's built
 
-Analysis runs on a **private machine**. The public site is **static files
-pushed to a public host**. There is no inference endpoint, no model, and no
-pipeline code on the public server — it cannot reach back into the private
-machine, by design.
+Analysis uses a local language model (LLM) with strict guide rails around verifying facts. The LLM may make mistakes, which is why the actual published text of the bill is always directly linked from all LLM claims.
+
+The public site is **static files pushed to a public host**. There is no inference endpoint, no model, and no
+pipeline code on the public server. It cannot reach back into the LLM, by design.
 
 ```
   private AI box                        public host
@@ -29,37 +28,18 @@ machine, by design.
   render static bundle                   subscriber list
 ```
 
-A deliberate design rule: **anything a parser can do, a parser does.** Bill
+Non-analyzed text is directly extracted, not processed with an LLM. Bill
 stage, what text a bill adds and deletes, which statutes it touches, committee
-votes, and the sponsor's own fiscal claim are all extracted deterministically
+votes, and the sponsor's own claims and summary are all extracted directly
 and carry no hallucination risk. The LLM is used only for genuine
 summarization and analysis, and every claim it makes must cite a verbatim span
 of the bill text that is checked against the source before publication.
 
-The local LLM is pluggable — llama.cpp, Ollama, MLX, or any OpenAI-compatible
-endpoint, with an optional cloud API key. Model profiles let the pipeline run
+The local LLM is pluggable, including local models or cloud API keys. Model profiles let the pipeline run
 on small models so contributors aren't required to own a large machine.
 
-## Status
+## Technical notes
 
-The deterministic layer is complete and the site builds. For the 2026 session:
-1,897 bills ingested with zero fetch failures, and every bill rendered with its
-pathway, the exact language it adds and deletes, and the statutes it changes.
-
-| layer | validation |
-|---|---|
-| Additions and deletions | 99.0% agreement against identical Senate companions |
-| Stage and outcome | 228/228 enacted bills, no misclassifications |
-| Statute cross-references | 98.7% recall, no false positives |
-
-No language model is involved in any of that.
-
-On top of it sits an analysis layer that does use one — a plain-English
-summary, the key provisions, and what the language would permit — where every
-claim must quote the bill verbatim and each quote is checked against the source
-before publication. Claims that fail are discarded. It is fenced and labelled
-on the page so a reader never has to guess which parts were read from the
-record and which were written by a model. See
 [docs/ANALYSIS-NOTES.md](docs/ANALYSIS-NOTES.md).
 
 See [docs/FEASIBILITY.md](docs/FEASIBILITY.md) for the plan and
@@ -92,7 +72,7 @@ Every stage is resumable and skips anything already cached, so a backfill runs
 in short chunks rather than one long session. Single bills can be pulled or
 refreshed on demand at any time, including while a backfill is running.
 
-Full instructions, including the MLX model setup, are in
+Full instructions, including a local LLM setup using MLX, are in
 [docs/SETUP.md](docs/SETUP.md).
 
 ## License
