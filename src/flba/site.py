@@ -111,8 +111,14 @@ def _has_table(db, name: str) -> bool:
                            " WHERE type='table' AND name=?", (name,)).fetchone())
 
 
+# Built by scripts/make_icons.py from one square source and committed, so a
+# build needs no image library. favicon.ico sits at the root because a browser
+# asks for it there whether a page names it or not.
+ICONS = ("favicon.ico", "icon-192.png", "icon-512.png", "apple-touch-icon.png")
+
+
 def _copy_static(out: Path) -> None:
-    """The stylesheet and the six faces it names.
+    """The stylesheet, the six faces it names, and the icons.
 
     They travel with the site because no page may reach a font CDN: a reader
     opening a bill is not a reason for a third party to hear about it. Copying
@@ -121,6 +127,8 @@ def _copy_static(out: Path) -> None:
     """
     shutil.copy(HERE / "static" / "style.css", out / "style.css")
     shutil.copytree(HERE / "static" / "fonts", out / "fonts", dirs_exist_ok=True)
+    for name in ICONS:
+        shutil.copy(HERE / "static" / name, out / name)
 
 
 def _copy_endpoints(out: Path) -> None:

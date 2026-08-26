@@ -806,3 +806,33 @@ def test_a_search_reaches_the_whole_session_not_the_slice_on_screen(built):
         text = page.read_text(encoding="utf-8")
         assert "wasEmpty" in text, page.name
         assert 'querySelector(\'a[data-outcome="all"]\')' in text, page.name
+
+
+def test_every_icon_a_page_names_is_shipped(built):
+    """A favicon that 404s is the same silent failure as a missing font.
+
+    The icons are built ahead of time and committed, so nothing in the build
+    would notice if one went missing -- only a browser would, and only by
+    falling back to a blank square.
+    """
+    import re
+    out, _ = built
+    named = set()
+    for page in (out / "index.html", out / "about.html",
+                 next(iter((out / "bills").glob("*.html")))):
+        html = page.read_text(encoding="utf-8")
+        depth = len(page.relative_to(out).parts) - 1
+        for href in re.findall(r'<link rel="(?:icon|apple-touch-icon)"[^>]*'
+                               r'href="([^"]+)"', html):
+            assert not href.startswith(("http://", "https://", "//")), \
+                f"{page.name} fetches an icon off-site: {href}"
+            named.add((out / page.parent.relative_to(out) / href).resolve())
+        assert depth == 0 or "../" in html, page.name
+
+    assert named, "no page names an icon at all"
+    for path in sorted(named):
+        assert path.is_file(), f"a page names {path.name} and it was not shipped"
+        assert path.stat().st_size > 0, path.name
+
+    # The one a browser asks for without being told has to be at the root.
+    assert (out / "favicon.ico").is_file()

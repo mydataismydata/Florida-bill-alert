@@ -6,6 +6,12 @@
 <title>{% block title %}{{ site_name }}{% endblock %}</title>
 <meta name="description" content="{% block description %}Plain English summaries and analysis of bills in the Florida Legislature.{% endblock %}">
 <link rel="stylesheet" href="{{ root }}style.css">
+{# The .ico carries 16, 32 and 48. The surround outside the badge is cut away,
+   so it does not read as a white tile on dark browser chrome. #}
+<link rel="icon" href="{{ root }}favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" href="{{ root }}icon-192.png" sizes="192x192">
+<link rel="icon" type="image/png" href="{{ root }}icon-512.png" sizes="512x512">
+<link rel="apple-touch-icon" href="{{ root }}apple-touch-icon.png">
 {# Light is the default. A reader who chose dark must not see a light flash
    first, so the stored choice is applied before the body is parsed. #}
 <script>try{var t=localStorage.getItem('sw-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
