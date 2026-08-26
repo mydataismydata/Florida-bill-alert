@@ -259,6 +259,10 @@ footer.site a { color: var(--acc2); }
   /* the count keeps its own line rather than squeezing the heading to one
      word per line */
   .ledger-head { flex-wrap: wrap; }
+  /* Forty-five tracked-out characters want 423px and a phone gives 335, so
+     the masthead overline wrapped to two centred lines above the wordmark and
+     read as a sentence that had stalled. Tightened to hold one line. */
+  .masthead .overline { font-size: 8px; letter-spacing: .22em; }
 }
 
 /* ================================================================ bill page */
