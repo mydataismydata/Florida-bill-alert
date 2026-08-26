@@ -1,9 +1,9 @@
 /* Session Watch — an archival ledger.
  *
  * Two themes off one set of tokens, flipped by a data-theme attribute on
- * <html>. Dark is the default and the attribute is written by a tiny script in
- * the document head, before first paint, so a reader who chose light does not
- * see a dark flash first.
+ * <html>. Light is the default and the attribute is written by a tiny script in
+ * the document head, before first paint, so a reader who chose dark does not
+ * see a light flash first.
  *
  * House rules from the design: no border radius anywhere, no rotation, no
  * icons, no emoji. Serif for prose, mono for anything a clerk would have
