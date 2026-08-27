@@ -50,8 +50,19 @@ _CHAPTERS: list[tuple[str, list[tuple[int, int]]]] = [
     ("Transportation",         [(316, 349), (310, 315)]),
     ("Environment & Water",    [(253, 259), (369, 380), (403, 403),
                                 (373, 373), (161, 162)]),
-    ("Healthcare",             [(381, 408), (456, 499), (409, 409),
-                                (394, 397)]),
+    # (456, 499) is Florida's "Regulation of Professions and Occupations"
+    # title -- health boards live there, but so do engineering, surveying,
+    # accountancy, real estate, trademarks, contracting, and a dozen other
+    # trades that have nothing to do with health. The gaps below carve out
+    # the confirmed non-health chapters rather than sweeping the whole title
+    # in: 469 elevator safety, 471-473 engineering/surveying/accountancy,
+    # 475-477 real estate/barbering/cosmetology, 481-482 architecture/pest
+    # control, 487-489 pesticide law/driving schools/contracting, 493
+    # private security, 495-496 trademarks/charitable solicitation.
+    ("Healthcare",             [(381, 408), (456, 468), (470, 470),
+                                (474, 474), (478, 480), (483, 486),
+                                (490, 492), (494, 494), (497, 499),
+                                (409, 409), (394, 397)]),
     ("Insurance",              [(624, 651)]),
     ("Agriculture",            [(500, 604)]),
     ("Housing",                [(420, 424), (718, 723)]),
@@ -101,10 +112,30 @@ _TITLE_RULES: list[tuple[str, re.Pattern]] = [
 
 _CHAPTER_OF = re.compile(r"^(\d+)")
 
+# Chapter 468 is itself a catch-all -- "Miscellaneous Professions and
+# Occupations" -- so genuine health practices (respiratory care, dietetics,
+# music therapy) sit interleaved with trades that aren't health at all.
+# Section numbers here are identifiers, not decimals (468.8322 is not "more"
+# than 468.84), so these are matched as string prefixes, not numeric ranges.
+# Confirmed non-health parts: .43 community association management, .60-.63
+# building code administrators and inspectors, .83 home inspection services.
+# A couple of other parts in this chapter (roughly .38-.41, .84) are cited
+# only by omnibus bills that touch nearly every board at once, so there's no
+# clean bill to confirm what they are -- left as Healthcare rather than
+# guessed at.
+_NON_HEALTH_468_PREFIXES = ("468.43", "468.60", "468.61", "468.62", "468.63", "468.83")
+
 
 def chapter_of(statute: str) -> int | None:
     m = _CHAPTER_OF.match((statute or "").strip())
     return int(m.group(1)) if m else None
+
+
+def area_of_statute(statute: str) -> str | None:
+    s = (statute or "").strip()
+    if s.startswith(_NON_HEALTH_468_PREFIXES):
+        return None
+    return area_of_chapter(chapter_of(s))
 
 
 def area_of_chapter(chapter: int | None) -> str | None:
@@ -126,7 +157,7 @@ def classify(statutes, title: str = "") -> str | None:
     """
     counts: dict[str, int] = {}
     for cite in statutes or ():
-        area = area_of_chapter(chapter_of(cite))
+        area = area_of_statute(cite)
         if area:
             counts[area] = counts.get(area, 0) + 1
 
