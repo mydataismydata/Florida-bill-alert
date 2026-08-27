@@ -32,14 +32,17 @@ function db(): PDO {
 }
 
 /**
- * The thirteen, and only these. A subscriber's interests are stored as these
+ * The sixteen, and only these. A subscriber's interests are stored as these
  * slugs, so anything not on the list is dropped rather than saved as free text
  * -- otherwise a typo becomes a subscription that can never match a bill.
+ * src/flba/areas.py holds the same list in name form; the two must not drift.
  */
 const AREAS = [
-    'agriculture', 'ai-technology', 'criminal-justice', 'development-land-use',
-    'education', 'elections', 'environment-water', 'healthcare', 'housing',
-    'insurance', 'local-government', 'taxes-budget', 'transportation',
+    'agriculture', 'ai-technology', 'criminal-justice',
+    'development-land-use', 'education', 'elections', 'environment-water',
+    'healthcare', 'housing', 'insurance', 'legal', 'local-government',
+    'occupational', 'public-health-safety', 'taxes-budget',
+    'transportation',
 ];
 
 function clean_areas(array $given): array {

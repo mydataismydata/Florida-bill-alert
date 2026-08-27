@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS subscriber (
     name          TEXT    DEFAULT '',
     role          TEXT    DEFAULT '',          -- legislator_staff | citizen | ''
     county        TEXT    DEFAULT '',
-    areas         TEXT    DEFAULT '',          -- comma-separated slugs from the fixed 13
+    areas         TEXT    DEFAULT '',          -- comma-separated slugs from the fixed 16
     daily         INTEGER NOT NULL DEFAULT 1,
     weekly        INTEGER NOT NULL DEFAULT 1,
     confirm_token TEXT    DEFAULT '',          -- single use, cleared on confirm

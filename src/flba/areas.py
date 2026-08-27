@@ -1,6 +1,6 @@
 """Which policy area a bill belongs to.
 
-The design leans on thirteen fixed areas -- for the chips on the front page,
+The design leans on sixteen fixed areas -- for the chips on the front page,
 for filtering, and for what a subscriber asks to hear about. Nothing in the
 record names them: the Legislature's own `subject` field is the bill's type
 ("GENERAL BILL", "JOINT RESOLUTION"), not its topic.
@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import re
 
-# The thirteen, fixed. A subscriber's stored interests reference these, so the
+# The sixteen, fixed. A subscriber's stored interests reference these, so the
 # list is an enum and not free text: renaming one silently re-points every
-# subscription that used it.
+# subscription that used it. public/lib.php holds the same list in slug form
+# and the two must not drift.
 AREAS = [
     "Agriculture",
     "AI & Technology",
@@ -35,7 +36,10 @@ AREAS = [
     "Healthcare",
     "Housing",
     "Insurance",
+    "Legal",
     "Local Government",
+    "Occupational",
+    "Public Health & Safety",
     "Taxes & Budget",
     "Transportation",
 ]
@@ -47,24 +51,63 @@ _CHAPTERS: list[tuple[str, list[tuple[int, int]]]] = [
     ("Elections",              [(97, 107)]),
     ("Education",              [(1000, 1013), (228, 246)]),
     ("Criminal Justice",       [(775, 985), (741, 741), (943, 947)]),
-    ("Transportation",         [(316, 349), (310, 315)]),
+    # 479 is outdoor advertising -- billboard permits along the state highway
+    # system. It sits in the professions title by accident of codification;
+    # the subject is roads.
+    ("Transportation",         [(316, 349), (310, 315), (479, 479)]),
     ("Environment & Water",    [(253, 259), (369, 380), (403, 403),
                                 (373, 373), (161, 162)]),
-    # (456, 499) is Florida's "Regulation of Professions and Occupations"
-    # title -- health boards live there, but so do engineering, surveying,
-    # accountancy, real estate, trademarks, contracting, and a dozen other
-    # trades that have nothing to do with health. The gaps below carve out
-    # the confirmed non-health chapters rather than sweeping the whole title
-    # in: 469 elevator safety, 471-473 engineering/surveying/accountancy,
-    # 475-477 real estate/barbering/cosmetology, 481-482 architecture/pest
-    # control, 487-489 pesticide law/driving schools/contracting, 493
-    # private security, 495-496 trademarks/charitable solicitation.
-    ("Healthcare",             [(381, 408), (456, 468), (470, 470),
-                                (474, 474), (478, 480), (483, 486),
-                                (490, 492), (494, 494), (497, 499),
-                                (409, 409), (394, 397)]),
+    # Title XXIX is "Public Health", which is wider than health care. These
+    # chapters are the public-health-and-safety end of it: mosquito control,
+    # elevator safety, the department's miscellaneous programmes, radiation,
+    # medical records held for research, and medical examiners. Listed above
+    # Healthcare so the broad (381, 408) below picks up only the rest.
+    # 403 -- environmental control -- is claimed by Environment & Water
+    # further up, which is where a reader looks for permitting and pollution.
+    ("Public Health & Safety", [(388, 388), (399, 399), (402, 402),
+                                (404, 406)]),
+    # Title XXXII is "Regulation of Professions and Occupations": chapters 454
+    # to 493, not 499. The health boards are 456-467, plus veterinary (474),
+    # electrolysis (478), massage (480), laboratory and therapy practice
+    # (483-486), and psychology and counselling (490-491). 468 is a catch-all
+    # chapter and is split by part below rather than by number. 429 is assisted
+    # living, which is Title XXX and so was never in the old range at all.
+    # 499 is the Florida Drug and Cosmetic Act.
+    ("Healthcare",             [(381, 408), (456, 468), (474, 474),
+                                (478, 478), (480, 480), (483, 486),
+                                (490, 491), (499, 499),
+                                (409, 409), (429, 429), (394, 397)]),
+    # Everything else that is a licence to practise a trade. 455 is the
+    # department's own general provisions, 470 and 497 are funeral and
+    # cemetery services, and the rest run from asbestos abatement through
+    # engineering, accountancy, real estate, cosmetology, pest control,
+    # contracting, geology and private security.
+    ("Occupational",           [(455, 455), (469, 473), (475, 477),
+                                (481, 482), (487, 489), (492, 493),
+                                (497, 497)]),
+    # Lawyers and the machinery they work in: attorneys (454), state
+    # attorneys and public defenders (27, 29), the courts and mediation
+    # (43-45), venue and process (47, 48), legal advertisements (50), costs
+    # and fees (57), miscellaneous civil proceedings (69), evidence (90),
+    # limitations (95), probate and trusts (733, 736), guardianship (744)
+    # and negligence (768). A statute about a specific subject another area
+    # already holds stays with that area -- this is the general law of
+    # practice, not every law a lawyer reads.
+    ("Legal",                  [(27, 27), (29, 29), (43, 45), (47, 48),
+                                (50, 50), (57, 57), (69, 69), (90, 90),
+                                (95, 95), (454, 454), (733, 733),
+                                (736, 736), (744, 744), (768, 768)]),
     ("Insurance",              [(624, 651)]),
-    ("Agriculture",            [(500, 604)]),
+    # (500, 604) is Florida's "Regulation of Trade, Commerce, Investments,
+    # and Solicitations" title -- chapter 500 (food products) and 570-604
+    # (Dept. of Agriculture and Consumer Services, plant and animal industry,
+    # aquaculture) are the department's real turf, but the same span also
+    # holds gambling (546, 550-551), pawnbrokers (538-539), securities and
+    # money transmitters (517, 520, 560), alcohol and tobacco (561-569),
+    # building codes (553), and hotels/vacation rentals (509) -- none of it
+    # agriculture. Keep only the confirmed chapters rather than the whole
+    # title.
+    ("Agriculture",            [(500, 500), (570, 604)]),
     ("Housing",                [(420, 424), (718, 723)]),
     ("Development & Land Use", [(163, 164), (177, 177), (190, 190),
                                 (333, 333), (553, 553)]),
@@ -123,7 +166,8 @@ _CHAPTER_OF = re.compile(r"^(\d+)")
 # only by omnibus bills that touch nearly every board at once, so there's no
 # clean bill to confirm what they are -- left as Healthcare rather than
 # guessed at.
-_NON_HEALTH_468_PREFIXES = ("468.43", "468.60", "468.61", "468.62", "468.63", "468.83")
+_OCCUPATIONAL_468_PREFIXES = ("468.43", "468.60", "468.61", "468.62",
+                              "468.63", "468.83")
 
 
 def chapter_of(statute: str) -> int | None:
@@ -133,8 +177,8 @@ def chapter_of(statute: str) -> int | None:
 
 def area_of_statute(statute: str) -> str | None:
     s = (statute or "").strip()
-    if s.startswith(_NON_HEALTH_468_PREFIXES):
-        return None
+    if s.startswith(_OCCUPATIONAL_468_PREFIXES):
+        return "Occupational"
     return area_of_chapter(chapter_of(s))
 
 

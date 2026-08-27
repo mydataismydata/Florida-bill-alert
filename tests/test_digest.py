@@ -44,13 +44,26 @@ def test_a_payload_names_bills_and_nothing_more(db, tmp_path):
 
 
 def test_every_area_slug_is_one_the_form_offers(db, tmp_path):
-    """A subscriber picks from thirteen. A payload carrying anything else is a
+    """A subscriber picks from sixteen. A payload carrying anything else is a
     bill no daily alert can ever match."""
     from flba.areas import AREAS, slug
     from flba.digest import build
     doc = build(db, "2026", tmp_path, "weekly", today=date(2025, 10, 1), days=30)
     valid = {slug(a) for a in AREAS} | {""}      # "" is a bill with no area
     assert {b["area_slug"] for b in doc["bills"]} <= valid
+
+
+def test_the_php_form_offers_exactly_the_areas_the_builder_files_bills_under():
+    """The area list lives twice -- once in Python, once in PHP -- because the
+    subscribe form runs on a host that has neither the builder nor the corpus.
+    A slug in one and not the other is a subscription that silently never
+    matches, or an area a reader cannot ask for."""
+    import re
+
+    from flba.areas import AREAS, slug
+    php = (ROOT / "public" / "lib.php").read_text()
+    block = php[php.index("const AREAS = ["):php.index("];", php.index("const AREAS = ["))]
+    assert re.findall(r"'([a-z0-9-]+)'", block) == [slug(a) for a in AREAS]
 
 
 def test_only_a_verified_summary_travels(db, tmp_path):
