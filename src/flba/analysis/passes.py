@@ -71,6 +71,21 @@ is forbidden.
 Never argue that a prohibition is weak, optional or merely advisory because of \
 which of these words it uses.
 
+Before saying what a deletion does, decide what kind of clause was struck -- \
+the kind decides the direction, and getting it wrong states the exact \
+opposite of what the bill does:
+- A GRANT OF AUTHORITY struck ("may apply for ...") means that route is gone.
+- A RESTRICTIVE QUALIFIER struck ("of a 501(c)(3) organization") means scope \
+WIDENS to reach more than before -- not less.
+- A PRECONDITION struck ("after assurances have been provided") means the \
+condition is gone, not that the underlying duty vanished.
+- A CEILING struck ("may not exceed $1,500") means the limit is lifted; \
+whatever duty sits under it is unchanged. A ceiling written as "may not \
+exceed" or "shall not exceed" is not a prohibition on the underlying act: \
+"compensation may not exceed 125 percent of the Medicare rate" permits \
+everything under that cap, and striking the clause raises or removes the \
+cap -- it does not forbid compensation.
+
 The final line of the message names which task to perform.
 
 TASK summary
