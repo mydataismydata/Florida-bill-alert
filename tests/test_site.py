@@ -24,7 +24,7 @@ def built(tmp_path_factory):
     return out, stats
 
 
-SUBPAGES = ("-text", "-prompt")
+SUBPAGES = ("-text",)
 
 
 def test_it_writes_a_summary_and_a_full_text_page_per_bill(built):
@@ -35,31 +35,6 @@ def test_it_writes_a_summary_and_a_full_text_page_per_bill(built):
     assert len(summaries) == 40
     # a full-text page exists wherever the bill's text was cached
     assert list((out / "bills").glob("*-text.html"))
-
-
-def test_a_prompt_page_accompanies_every_bill_that_has_text(built):
-    """What the model is asked is published beside what it answered."""
-    out, _ = built
-    texts = {p.stem[: -len("-text")] for p in (out / "bills").glob("*-text.html")}
-    prompts = {p.stem[: -len("-prompt")] for p in (out / "bills").glob("*-prompt.html")}
-    assert texts and texts == prompts
-
-
-def test_the_prompt_page_shows_the_prompt_actually_sent(built):
-    out, _ = built
-    page = next((out / "bills").glob("*-prompt.html")).read_text(encoding="utf-8")
-    from flba.analysis import passes as P
-    # the system message is reproduced, not paraphrased
-    for line in P.SYSTEM.splitlines():
-        if len(line) > 40:
-            assert escape(line) in page, line[:60]
-    for name in P.ORDER:
-        assert f"TASK {name}" in page
-
-
-def escape(text):
-    from markupsafe import escape as e
-    return str(e(text))
 
 
 def test_a_plain_build_carries_no_operator_controls(built):
@@ -81,6 +56,18 @@ def test_a_local_build_carries_them_and_is_marked(tmp_path_factory):
     pages = [p for p in (out / "bills").glob("*.html")
              if not p.stem.endswith(SUBPAGES)]
     assert any("_reanalyze" in p.read_text(encoding="utf-8") for p in pages)
+
+
+def test_the_documented_prompt_is_the_prompt_that_gets_sent():
+    """The prompt used to be published per bill, built from passes.py, so it
+    could not drift. It is documented in the repository now instead, which can
+    drift -- unless something checks. Run scripts/sync_prompt_doc.py."""
+    from flba.analysis import passes as P
+
+    doc = (ROOT / "docs" / "ANALYSIS-NOTES.md").read_text(encoding="utf-8")
+    assert P.SYSTEM.rstrip() in doc, "docs/ANALYSIS-NOTES.md is behind passes.SYSTEM"
+    for name in P.ORDER:
+        assert f"| `{name}` | {P.BUDGET[name]} |" in doc, name
 
 
 def test_no_template_syntax_escapes_into_the_output(built):
@@ -236,34 +223,6 @@ def test_only_rejects_a_bill_that_is_not_there(built):
     out, _ = built
     with pytest.raises(SystemExit):
         build(DB, out, "2026", built="2026-01-01", only=999999)
-
-
-def test_the_published_prompt_is_the_prompt_that_gets_sent(built):
-    """The page is only worth publishing if it cannot drift from the request.
-    Both are built from passes.SYSTEM and brief.build, so compare the rendered
-    page against a freshly assembled message."""
-    import html as _html
-    import re as _re
-    import sqlite3
-    from flba.analysis import passes as P
-    from flba.analysis.analyze import load_bill
-    from flba.analysis.brief import build as build_brief
-
-    out, _ = built
-    page_path = sorted((out / "bills").glob("*-prompt.html"))[0]
-    num = int(page_path.stem[: -len("-prompt")])
-
-    db = sqlite3.connect(str(DB))
-    db.row_factory = sqlite3.Row
-    bill, _version, diff, refs = load_bill(db, "2026", num)
-    sent = P.messages(build_brief(bill, diff, refs)["text"], "summary")
-
-    blocks = _re.findall(r'<pre class="prompt">(.*?)</pre>',
-                         page_path.read_text(encoding="utf-8"), _re.S)
-    assert len(blocks) == 2, "expected a system block and a user block"
-    assert _html.unescape(blocks[0]) == sent[0]["content"]
-    shown = _html.unescape(_re.sub(r"<[^>]+>", "", blocks[1]))
-    assert shown.rsplit("\n\nTASK", 1)[0] == sent[1]["content"].rsplit("\n\nTASK", 1)[0]
 
 
 # --- pulling the member out of a committee chain ---------------------------
@@ -477,7 +436,7 @@ def test_every_template_renders_for_every_bill(built):
     the first page did."""
     out, stats = built
     assert stats["bills"] == 40
-    for suffix in ("", "-text", "-prompt"):
+    for suffix in ("", "-text"):
         pages = list((out / "bills").glob(f"*{suffix}.html")) if suffix else [
             p for p in (out / "bills").glob("*.html")
             if not p.stem.endswith(SUBPAGES)]

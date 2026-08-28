@@ -62,9 +62,12 @@
      summary that contradicts the bill's own markup is withheld entirely, which
      is why one bill here publishes provisions and no summary.</p>
   <p>The model runs on a private machine. The public server holds no model, no
-     pipeline and no database — only files. Every bill page links to
-     <strong>the exact prompt</strong> that produced its analysis, reproduced
-     from the same code that sends it.</p>
+     pipeline and no database — only files. <strong>The exact prompt</strong>
+     the model is given, the schema its answer must fit and the checks that
+     answer has to pass are published in full in the
+     <a href="{{ repo }}/blob/main/docs/ANALYSIS-NOTES.md" target="_blank"
+        rel="noopener">source repository</a>, which is where they are read
+     from at run time.</p>
 
   <div class="slabel">SOME WORDS MEAN THE OPPOSITE OF WHAT THEY LOOK LIKE</div>
   <p>Reading the record correctly takes care, and this tracker is built around

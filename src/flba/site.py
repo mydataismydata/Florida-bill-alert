@@ -16,11 +16,8 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from .analysis import passes as P
 from .areas import AREAS, classify, slug
-from .analysis.analyze import RETRIES
 from .analysis.analyze import tidy_statute
-from .analysis.brief import build as build_brief
 from .diff import PLAIN, BillDiff, Segment, context_blocks, locate
 from .diff import lines as doc_lines
 from .stages import OUTCOME_SHORT, kind_of, pathway, track
@@ -346,25 +343,6 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                     root="../", b=b, version=version, fmt=fmt,
                     lines=doc_lines(d), chars=nchars,
                     heavy=nchars > 250_000, **common), encoding="utf-8")
-
-            # Exactly what the model is asked, reproduced from the same code
-            # that asks it. Building this needs no model and no network -- the
-            # brief is assembled from the bill text -- so it is safe to publish
-            # and stays true whenever the prompt changes.
-            # brief.build reads these with .get, and sqlite3.Row has none
-            brief = build_brief(dict(b), d, [dict(r) for r in refs])
-            (out / "bills" / f"{b['num']}-prompt.html").write_text(
-                env.get_template("prompt.html").render(
-                    root="../", b=b, ai=ai, system=P.SYSTEM,
-                    brief=brief["text"], brief_chars=len(brief["text"]),
-                    passages=brief["passages"],
-                    total_passages=brief["total_passages"],
-                    truncated=brief["truncated"],
-                    retries=RETRIES,
-                    passes=[{"name": n, "max_tokens": P.BUDGET[n],
-                             "schema": json.dumps(P.SCHEMAS[n], indent=2)}
-                            for n in P.ORDER],
-                    **common), encoding="utf-8")
 
         area = classify([r["statute"] for r in refs], b["title"] or "")
         _panels, members = split_sponsor(b["sponsor"] or "", committees)
