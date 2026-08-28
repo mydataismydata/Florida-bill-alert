@@ -70,6 +70,42 @@ def test_the_documented_prompt_is_the_prompt_that_gets_sent():
         assert f"| `{name}` | {P.BUDGET[name]} |" in doc, name
 
 
+def test_a_companion_row_names_the_bill_that_was_set_aside(built):
+    """The row opens with the companion's number, so "this bill was set aside"
+    read as though the companion was the one that died. It has to name the
+    page's own bill, and link the companion whenever that page was built --
+    this fixture builds 40 bills, so most companions fall outside it and are
+    named without a link rather than linked into thin air."""
+    import re as _re
+
+    out, _ = built
+    here = {p.stem for p in (out / "bills").glob("*.html")
+            if not p.stem.endswith("-text")}
+    rows = []
+    for stem in sorted(here):
+        html = (out / "bills" / f"{stem}.html").read_text(encoding="utf-8")
+        m = _re.search(r'<div class="k">COMPANION</div><div class="v">(.*?)</div>',
+                       html, _re.S)
+        if m:
+            rows.append((stem, m.group(1)))
+    assert rows, "fixture has no bill with a companion"
+    for stem, row in rows:
+        assert "this bill was set aside" not in row, stem
+        # "<companion> — <this bill> was set aside ..." -- the two must differ,
+        # which is the whole point: naming the companion twice is the misread
+        # the old wording invited.
+        companion, named = _re.search(
+            r"^(.*?)\s+—\s+(.*?) was set aside and its companion "
+            r"carried the policy$", _re.sub(r"<[^>]+>", "", row).strip()).groups()
+        assert named != companion, stem
+        assert named.endswith(stem), f"{stem} names {named!r}"
+        num = _re.search(r"(\d+)", companion).group(1)
+        if num in here:
+            assert f'<a href="../bills/{num}.html">' in row, stem
+        else:
+            assert "<a href" not in row, stem
+
+
 def test_no_template_syntax_escapes_into_the_output(built):
     out, _ = built
     for page in out.rglob("*.html"):

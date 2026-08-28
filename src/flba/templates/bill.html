@@ -55,7 +55,10 @@
     </div></div>
     {% endif %}
     {% if b.effective_date %}<div class="row"><div class="k">EFFECTIVE</div><div class="v">{{ b.effective_date }}</div></div>{% endif %}
-    {% if p.companion %}<div class="row"><div class="k">COMPANION</div><div class="v">{{ p.companion }} — this bill was set aside and its companion carried the policy</div></div>{% endif %}
+    {% if p.companion %}<div class="row"><div class="k">COMPANION</div><div class="v">{#
+    Naming this bill rather than saying "this bill" -- the sentence opens with
+    the companion's number, so "this bill was set aside" read as though the
+    companion was the one that died. #}{% if companion_href %}<a href="{{ root }}bills/{{ companion_href }}.html">{{ p.companion }}</a>{% else %}{{ p.companion }}{% endif %} — {{ b.label }} was set aside and its companion carried the policy</div></div>{% endif %}
     {% if p.died_in %}<div class="row"><div class="k">DIED IN</div><div class="v">{{ p.died_in }}</div></div>{% endif %}
     <div class="row"><div class="k">OFFICIAL RECORD</div><div class="v">
       <a href="{{ b.url }}" target="_blank" rel="noopener">{{ b.url|replace('https://www.','') }}</a></div></div>

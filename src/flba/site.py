@@ -377,8 +377,13 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         if not (_panels or any(f.get("district") or f.get("url") or f.get("slug")
                                for f in filed_by)):
             filed_by = []
+        # A companion is only linked when its page was written too. A --only
+        # build writes one bill, and a link out of it would land nowhere.
+        companion_href = (prog.companion_num
+                          if prog.companion_num in built_nums else None)
         html = env.get_template("bill.html").render(
             root="../", b=b, p=prog, path=pathway(prog), refs=refs,
+            companion_href=companion_href,
             members=members, sponsor_has_committees=bool(_panels),
             filed_by=filed_by,
             area=area, area_slug=slug(area),

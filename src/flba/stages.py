@@ -197,6 +197,18 @@ class BillProgress:
     events: int = 0
 
     @property
+    def companion_num(self) -> int | None:
+        """The companion's bill number, so the page can link to it.
+
+        The history writes the companion as the chamber labels it -- "CS/SB
+        156" -- and the number is what addresses a page. Every companion this
+        session resolves to a bill in the table, but the caller still checks:
+        a label without digits must not render half a link.
+        """
+        m = re.search(r"(\d+)", self.companion or "")
+        return int(m.group(1)) if m else None
+
+    @property
     def kind_label(self) -> str:
         return KIND_LABEL[self.kind]
 
