@@ -105,7 +105,7 @@ function subject_for(array $doc, int $n): string {
     if (($doc['product'] ?? '') === 'daily') {
         return sprintf('%d new bill%s in your areas of interest', $n, $n === 1 ? '' : 's');
     }
-    return 'Session Watch — the week in the ' . ($doc['session'] ?? '') . ' session';
+    return 'Know Your Legislation — the week in the ' . ($doc['session'] ?? '') . ' session';
 }
 
 function body_for(array $doc, array $bills, string $email): string {

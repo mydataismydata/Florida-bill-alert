@@ -59,8 +59,8 @@ if ($existing) {
 if ($needs_confirm) {
     $base = rtrim(cfg()['base_url'], '/');
     $link = $base . '/confirm.php?e=' . rawurlencode($email) . '&t=' . $token;
-    send_mail($email, 'Confirm your Session Watch subscription',
-        "Confirm your subscription to Session Watch:\n\n$link\n\n"
+    send_mail($email, 'Confirm your Know Your Legislation subscription',
+        "Confirm your subscription to Know Your Legislation:\n\n$link\n\n"
       . "The link works once. If you did not ask for this, ignore this message "
       . "-- nothing is sent until it is used, and the address is removed after "
       . "seven days.\n\n$base\n");

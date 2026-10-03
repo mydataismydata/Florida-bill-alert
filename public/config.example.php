@@ -16,7 +16,7 @@ return [
 
     // Envelope. Use a dedicated sending subdomain so a reputation problem here
     // cannot reach your ordinary mail.
-    'from_name'  => 'Session Watch',
+    'from_name'  => 'Know Your Legislation',
     'from_email' => 'alerts@mail.example.org',
     'reply_to'   => 'hello@example.org',
 

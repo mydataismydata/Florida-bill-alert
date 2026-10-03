@@ -88,7 +88,7 @@ function send_mail(string $to, string $subject, string $text, array $extra = [])
         'Reply-To'     => $c['reply_to'] ?? $c['from_email'],
         'MIME-Version' => '1.0',
         'Content-Type' => 'text/plain; charset=utf-8',
-        'X-Mailer'     => 'session-watch',
+        'X-Mailer'     => 'know-your-legislation',
     ] + $extra;
 
     $lines = [];
@@ -125,13 +125,13 @@ function page(string $title, string $body, int $code = 200): void {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{$title} · Session Watch</title>
+<title>{$title} · Know Your Legislation</title>
 <link rel="stylesheet" href="{$base}/style.css">
 <script>try{var t=localStorage.getItem('sw-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
 <body>
 <header class="masthead compact">
-  <div class="wordmark"><a href="{$base}/index.html">SESSION WATCH</a></div>
+  <div class="wordmark"><a href="{$base}/index.html">KNOW YOUR LEGISLATION</a></div>
   <nav><a href="{$base}/index.html">BILLS</a><a href="{$base}/about.html">ABOUT</a></nav>
 </header>
 <main><div class="prose">{$body}</div></main>

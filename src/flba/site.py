@@ -23,7 +23,7 @@ from .diff import lines as doc_lines
 from .stages import OUTCOME_SHORT, kind_of, pathway, track
 
 HERE = Path(__file__).resolve().parent
-SITE_NAME = "Session Watch"
+SITE_NAME = "Know Your Legislation"
 REPO = "https://github.com/mydataismydata/Florida-bill-alert"
 MAX_BLOCKS = 12           # changed passages on the summary page
 # Key provisions are the point of the page, so they are shown. The fold
