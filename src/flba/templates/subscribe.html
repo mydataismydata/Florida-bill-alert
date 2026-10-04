@@ -59,11 +59,14 @@
       </div>
       <div class="frow">
         <div class="n">5</div><div class="k">AREAS OF INTEREST</div>
-        <div class="f"><div class="grid3">
+        <div class="f">
+          <label class="selall"><input type="checkbox" id="allareas"><span class="box">✓</span>Select all</label>
+          <div class="grid3">
           {% for a in areas %}
           <label><input type="checkbox" name="areas[]" value="{{ a.slug }}"><span class="box">✓</span>{{ a.name }}</label>
           {% endfor %}
-        </div></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -94,17 +97,33 @@
   </aside>
 </div>
 
+<div class="toasts" aria-live="polite" aria-atomic="true"></div>
+
 <script>
 (function () {
+  var form = document.getElementById('subform');
+  var all = document.getElementById('allareas');
+  var areas = form.querySelectorAll('input[name="areas[]"]');
+
   // The bordered "selected" state follows the checkbox, so it stays right if a
-  // reader navigates back to a half-filled form.
+  // reader navigates back to a half-filled form. "Select all" is a view of the
+  // boxes below it rather than a value of its own: it has no name, so the form
+  // never sends it, and it shows a dash when only some are ticked.
   function sync() {
     Array.prototype.forEach.call(document.querySelectorAll('[data-choice]'), function (l) {
       l.className = l.querySelector('input').checked ? 'sel' : '';
     });
+    var n = 0;
+    Array.prototype.forEach.call(areas, function (b) { if (b.checked) n++; });
+    all.checked = n === areas.length;
+    all.indeterminate = n > 0 && n < areas.length;
   }
-  document.getElementById('subform').addEventListener('change', sync);
-  sync();
+  // Runs before the form's own listener, which then brings the dash up to date.
+  all.addEventListener('change', function () {
+    Array.prototype.forEach.call(areas, function (b) { b.checked = all.checked; });
+  });
+  form.addEventListener('change', sync);
+
   // carried over from the front page or a bill page
   var q = new URLSearchParams(location.search);
   if (q.get('email')) document.getElementById('email').value = q.get('email');
@@ -113,6 +132,57 @@
     var box = document.querySelector('input[name="areas[]"][value="' + area + '"]');
     if (box) { box.checked = true; box.closest('label').scrollIntoView({block: 'center'}); }
   }
+  sync();
+
+  // With script, the form answers in place instead of leaving the page. The
+  // form is left filled in, so a mistyped address can be corrected and sent
+  // again. Without script it posts normally and subscribe.php renders a page.
+  var btn = form.querySelector('button[type="submit"]');
+  var toasts = document.querySelector('.toasts');
+  var timer;
+  function clear() { clearTimeout(timer); toasts.textContent = ''; }
+  function toast(ok, message) {
+    clear();
+    var t = document.createElement('div');
+    t.className = ok ? 'toast' : 'toast err';
+    var head = document.createElement('div');
+    head.className = 'th';
+    var label = document.createElement('span');
+    label.textContent = ok ? 'CHECK YOUR EMAIL' : 'NOT SENT';
+    var x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'x';
+    x.setAttribute('aria-label', 'Dismiss');
+    x.textContent = '×';
+    x.addEventListener('click', clear);
+    head.appendChild(label);
+    head.appendChild(x);
+    var p = document.createElement('p');
+    p.textContent = message;
+    t.appendChild(head);
+    t.appendChild(p);
+    toasts.appendChild(t);
+    timer = setTimeout(clear, 15000);
+  }
+  form.addEventListener('submit', function (e) {
+    if (!window.fetch || !window.FormData) return;
+    e.preventDefault();
+    btn.disabled = true;
+    fetch(form.action, {method: 'POST', body: new FormData(form),
+                        headers: {'Accept': 'application/json'}})
+      .then(function (r) {
+        // nginx answers this one itself, before PHP sees the request
+        if (r.status === 429) {
+          return {ok: false, message: 'Too many tries from this connection. Wait a minute and try again.'};
+        }
+        return r.json();
+      })
+      .then(function (d) { toast(d.ok, d.message); })
+      .catch(function () {
+        toast(false, 'The form could not reach the server. Check the connection and try again.');
+      })
+      .then(function () { btn.disabled = false; });
+  });
 })();
 </script>
 {% endblock %}

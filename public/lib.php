@@ -114,6 +114,23 @@ function h(?string $s): string {
 
 function now(): string { return gmdate('Y-m-d H:i:s'); }
 
+/**
+ * True when the page's own script sent the form and wants a sentence back to
+ * show in place, rather than a page to navigate to. Without script the form
+ * posts normally and gets page().
+ */
+function wants_json(): bool {
+    return str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
+}
+
+/** The script's counterpart to page(): one message, and whether it worked. */
+function reply(bool $ok, string $message, int $code = 200): void {
+    http_response_code($code);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => $ok, 'message' => $message], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 /** A plain page in the site's voice, for the handful of times PHP renders one. */
 function page(string $title, string $body, int $code = 200): void {
     http_response_code($code);

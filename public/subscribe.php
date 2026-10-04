@@ -14,6 +14,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 
 $email = trim((string) ($_POST['email'] ?? ''));
 if (!valid_email($email)) {
+    if (wants_json()) {
+        reply(false, 'That address does not look right. Check it and try again.', 400);
+    }
     page('Check the address', '<div class="slabel">SUBSCRIBE</div>'
         . '<p>That address does not look right. '
         . '<a href="' . h(rtrim(cfg()['base_url'], '/')) . '/subscribe.html">Try again</a>.</p>', 400);
@@ -66,6 +69,10 @@ if ($needs_confirm) {
       . "seven days.\n\n$base\n");
 }
 
+if (wants_json()) {
+    reply(true, 'A confirmation link is on its way to ' . $email . '. Nothing is sent '
+        . 'until you use it. If it does not arrive within a few minutes, check the spam folder.');
+}
 page('Check your email', '<div class="slabel">SUBSCRIBE</div>'
     . '<p>A confirmation link is on its way to <strong>' . h($email) . '</strong>. '
     . 'Nothing is sent until you use it.</p>'
