@@ -30,8 +30,9 @@ $names = [
     'criminal-justice' => 'Criminal Justice', 'development-land-use' => 'Development & Land Use',
     'education' => 'Education', 'elections' => 'Elections',
     'environment-water' => 'Environment & Water', 'healthcare' => 'Healthcare',
-    'housing' => 'Housing', 'insurance' => 'Insurance',
-    'local-government' => 'Local Government', 'taxes-budget' => 'Taxes & Budget',
+    'housing' => 'Housing', 'insurance' => 'Insurance', 'legal' => 'Legal',
+    'local-government' => 'Local Government', 'occupational' => 'Occupational',
+    'public-health-safety' => 'Public Health & Safety', 'taxes-budget' => 'Taxes & Budget',
     'transportation' => 'Transportation',
 ];
 
