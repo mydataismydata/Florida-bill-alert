@@ -29,6 +29,16 @@ $cfg   = cfg();
 $dir   = $cfg['mail_dir'];
 $limit = (int) ($argv[1] ?? 0);    // optional cap per run, for a first live test
 
+// The confirmation email promises an unused address is removed after seven
+// days. This keeps that promise. The link has expired by then (confirm.php),
+// so the row can never become a subscriber and is only an address held for
+// no reason. It runs before the payload check so it happens on every run.
+$gone = db()->prepare("DELETE FROM subscriber WHERE confirmed_at = '' AND confirm_sent < ?");
+$gone->execute([gmdate('Y-m-d H:i:s', time() - 7 * 86400)]);
+if ($gone->rowCount()) {
+    fwrite(STDOUT, sprintf("[%s] removed %d unconfirmed\n", now(), $gone->rowCount()));
+}
+
 if (!is_dir($dir)) {
     fwrite(STDERR, "no mail directory at $dir\n");
     exit(1);

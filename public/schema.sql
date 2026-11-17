@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS subscriber (
     daily         INTEGER NOT NULL DEFAULT 1,
     weekly        INTEGER NOT NULL DEFAULT 1,
     confirm_token TEXT    DEFAULT '',          -- single use, cleared on confirm
-    confirm_sent  TEXT    DEFAULT '',
+    confirm_sent  TEXT    DEFAULT '',          -- last form mail: the link, or once confirmed the settings link
     confirmed_at  TEXT    DEFAULT '',
     unsubscribed  TEXT    DEFAULT '',
     created_at    TEXT    NOT NULL,

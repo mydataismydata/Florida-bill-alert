@@ -70,6 +70,13 @@
       </div>
     </div>
 
+    {# Off-screen and out of the tab order, so people never fill it in. A
+       script that fills in every field does, and subscribe.php drops the post.
+       The name is one no browser or password manager will autofill. #}
+    <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden">
+      <label>Leave this empty <input type="text" name="contact_by_fax_only" tabindex="-1" autocomplete="off"></label>
+    </div>
+
     <div class="submitrow">
       <button class="btn" type="submit">Subscribe</button>
       <p>A confirmation link follows via email.
