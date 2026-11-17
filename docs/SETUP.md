@@ -134,39 +134,59 @@ disabled apart from the search box, prints legibly and follows the reader's ligh
 
 ```bash
 cat > .env <<'EOF'
+FLBA_HOST=ubuntu@203.0.113.10
+FLBA_PATH=/srv/sessionwatch/site
+EOF
+
+scripts/deploy.sh          # dry run — shows what would change
+scripts/deploy.sh --go     # push
+```
+
+This is the path for a public host that gives you a shell. `rsync --checksum`
+compares content rather than timestamps, which matters because the site is
+regenerated from templates: every file's mtime moves on every build even when
+its bytes do not. A rebuild after one bill's analysis ships three files, not
+7,998.
+
+`--delete` keeps the public tree an exact mirror, so a bill withdrawn from the
+source does not linger. Two things in the destination are not in the source and
+are protected from it by name:
+
+- `config.php`, which holds the database password and the secret signing every
+  manage and unsubscribe link. It is uploaded once, by hand.
+- `mail/`, where digest payloads wait for the next cron run. A payload deleted
+  before it is sent is a digest nobody receives, and nothing reports it.
+
+Setting up the public host itself — container, nginx, database, mail relay —
+is [deploy/ovh/README.md](../deploy/ovh/README.md).
+
+The push is one-way. The public host never connects back to this machine and
+holds no model and no pipeline code. That is what makes the gap structural
+rather than merely configured.
+
+### A host that sells SFTP without a shell
+
+```bash
+cat > .env <<'EOF'
 FLBA_HOST=access.example.com
 FLBA_USER=u12345678
 FLBA_PATH=/billalert
 FLBA_URL=https://bills.example.com
 EOF
 
-scripts/deploy.py          # dry run — shows what would change
+scripts/deploy.py          # dry run
 scripts/deploy.py --go     # push
 ```
 
-Set up key authentication once, so a push never stops to ask for a password:
+Shared hosting often sells file access without a shell, which rules rsync out.
+`scripts/deploy.py` keeps a manifest in `.deploy/` of what the server holds and
+sends only the difference over SFTP. Above a few hundred changed files it sends
+one archive and a short PHP unpacker instead, because thousands of separate
+uploads spend their time waiting on round trips rather than moving bytes. The
+unpacker needs a token, deletes the archive, then deletes itself. `FLBA_URL` is
+what lets the script trigger it without a browser.
 
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/ionos -N ''
-ssh-copy-id -i ~/.ssh/ionos.pub u12345678@access.example.com
-```
-
-**Only what changed travels.** The site is regenerated from templates, so every
-file's timestamp moves on every build even when its bytes do not. A rebuild after one bill's analysis ships
-three files, not 9,731. The first push is the whole site; after that a manifest
-in `.deploy/` records what the server holds.
-
-Above a few hundred changed files it sends one archive and a short PHP
-unpacker instead, because thousands of separate uploads spend their time
-waiting on round trips rather than moving bytes. The unpacker needs a token,
-deletes the archive, then deletes itself. `FLBA_URL` is what lets the script
-trigger it without a browser.
-
-The push is one-way. The public host never connects back to this machine and
-holds no model, no pipeline, and no database — only files. That is what makes
-the gap structural rather than merely configured.
-
-### No SFTP account
+With no SFTP account either:
 
 ```bash
 scripts/deploy.py --pack
@@ -175,10 +195,6 @@ scripts/deploy.py --pack
 Writes `dist/_deploy.zip` and `dist/_unpack.php`. Upload those two by hand,
 open the URL it prints, done — two files rather than the whole tree. It cannot
 delete files that left the site, so it prints those for you to remove.
-
-`scripts/deploy.sh` is the older rsync-over-SSH path. It still works if the
-host gives you a shell, but it needs one; SFTP is available on plans that do
-not.
 
 ## Running the site locally, with the operator controls
 
@@ -211,15 +227,12 @@ structural rather than merely configured.
 
 ### Seeing the prompt
 
-Every bill page links to **See the exact prompt**, which reproduces the whole
-of what the model is given: the system message, the brief built from the bill
-text, the three task selectors, and the JSON schema each pass must satisfy.
-It is generated from the same code that builds the request, and a test asserts
-the two match byte for byte, so it cannot drift into being a plausible
-description of the prompt rather than the prompt.
-
-These pages need no model and no network to build, so they ship with the
-public site.
+The whole of what the model is given is published in
+[docs/ANALYSIS-NOTES.md](ANALYSIS-NOTES.md): the system message, the three task
+selectors, and the JSON schema each pass must satisfy. `scripts/sync_prompt_doc.py`
+regenerates that section from the code that builds the request, and a test
+asserts the two match, so it cannot drift into being a plausible description of
+the prompt rather than the prompt.
 
 ## Members
 

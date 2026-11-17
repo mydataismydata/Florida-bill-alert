@@ -8,6 +8,11 @@
  *
  * It writes only to the database named in config.php, so point that at a
  * throwaway file the first time.
+ *
+ * schema.sql is deliberately not shipped into the web root, where it would be
+ * served as a plain file. Say where it is:
+ *
+ *   FLBA_SCHEMA=/srv/sessionwatch/stack/schema.sql php selftest.php
  */
 declare(strict_types=1);
 require __DIR__ . '/lib.php';
@@ -22,11 +27,30 @@ function check(string $what, bool $ok): void {
 }
 
 $pdo = db();
-$sql = preg_replace('/^\s*--.*$/m', '', (string) file_get_contents(__DIR__ . '/schema.sql'));
+
+// Not shipped beside this file, so its absence is the normal case on a server
+// rather than a surprise. Saying so and stopping beats a run that reports the
+// schema applied and then dies on the first insert.
+$schema = getenv('FLBA_SCHEMA') ?: __DIR__ . '/schema.sql';
+if (!is_file($schema)) {
+    fwrite(STDERR, "no schema at $schema\n"
+                 . "point FLBA_SCHEMA at public/schema.sql and run again\n");
+    exit(2);
+}
+$sql = preg_replace('/^\s*--.*$/m', '', (string) file_get_contents($schema));
 foreach (explode(';', $sql) as $stmt) {
     if (trim($stmt) !== '') { $pdo->exec($stmt); }
 }
-check('schema applies', true);
+
+// Asking each table to answer, rather than asserting that it must have
+// worked. The hardcoded pass this replaces reported success against a schema
+// file that was not there.
+$applied = true;
+foreach (['subscriber', 'sent', 'request'] as $table) {
+    try { $pdo->query("SELECT 1 FROM $table WHERE 1 = 0"); }
+    catch (PDOException $e) { $applied = false; }
+}
+check('schema applies', $applied);
 
 $e = 'Reader@Example.test';
 $t = sign($e, 'manage');

@@ -1,0 +1,39 @@
+# Copy to msmtprc beside docker-compose.yml on the server, fill in the three
+# CHANGE-ME lines, then:
+#
+#   sudo chown 33:33 msmtprc && sudo chmod 600 msmtprc
+#
+# Changing it later takes one more step. Docker binds a single file by its
+# inode, and most editors save by writing a new file and renaming it over the
+# old one. The container goes on reading the inode that is no longer there, so
+# the edit appears to do nothing:
+#
+#   sudo -e /srv/sessionwatch/stack/msmtprc
+#   cd /srv/sessionwatch/stack && docker compose up -d --force-recreate php
+#
+# 33 is www-data inside the container, which is the user FPM runs as. msmtp
+# refuses to read a configuration file that anyone else can read, and a
+# bind-mounted file keeps the host's ownership, so both have to be set on the
+# host side.
+#
+# Why a relay at all. This machine's reverse DNS is ns1002847.ip-51-81-49.us
+# and the sending domain publishes no SPF record naming its address. Mail sent
+# straight from here is junked or refused outright by most receivers, and the
+# failure is silent from this end -- a confirmation link that never arrives
+# looks exactly like a reader who never clicked.
+
+defaults
+auth           on
+tls            on
+tls_starttls   on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        -
+
+account        sessionwatch
+host           smtp.ionos.com
+port           587
+from           CHANGE-ME@example.org
+user           CHANGE-ME@example.org
+password       CHANGE-ME
+
+account default : sessionwatch

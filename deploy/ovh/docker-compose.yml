@@ -1,0 +1,56 @@
+# The PHP endpoints, and nothing else.
+#
+# The pipeline does not run here and its code is not on this machine. What the
+# public server holds is the built site, six PHP files, a subscriber database
+# and this container. That is the whole of it, and it is what lets the README
+# say the public host cannot reach back into the model.
+#
+# Names, ports and the project name are all prefixed to stay clear of PAC
+# Tracker, which shares this box.
+name: session-watch
+
+services:
+  php:
+    build:
+      context: .
+    image: sessionwatch-php:local
+    container_name: sessionwatch-php
+    restart: unless-stopped
+
+    # Loopback only. Docker writes its rules ahead of ufw's, so a port
+    # published without the 127.0.0.1 prefix is open to the internet whatever
+    # the firewall reports. nginx is the only thing that should reach FPM.
+    ports:
+      - "127.0.0.1:9010:9000"
+
+    volumes:
+      # Mounted at the same path nginx names, so SCRIPT_FILENAME resolves
+      # identically on both sides. Read-only: nothing the endpoints do writes
+      # to the site tree, and a deploy replaces it wholesale anyway.
+      - /srv/sessionwatch/site:/srv/sessionwatch/site:ro
+
+      # The database. Outside the web root, so no request can name it.
+      - /srv/sessionwatch/data:/srv/sessionwatch/data
+
+      # Relay credentials. Kept out of the image so rebuilding does not reprint
+      # them into a layer. Must be mode 600 and owned by uid 33 on the host or
+      # msmtp refuses to read it.
+      - ./msmtprc:/etc/msmtprc:ro
+
+      # The schema, for selftest.php and for creating the database. It is
+      # deliberately not shipped into the site tree, where a web server would
+      # hand it out as a plain file, so it is mounted on its own here rather
+      # than by exposing the whole stack directory and its credentials.
+      - ./schema.sql:/srv/sessionwatch/schema.sql:ro
+
+    environment:
+      # selftest.php looks beside itself first, and it is not there.
+      FLBA_SCHEMA: /srv/sessionwatch/schema.sql
+
+    # Eight FPM children at 64 MB each is the ceiling. Stated here so a runaway
+    # takes its own container down rather than the neighbouring application's
+    # database.
+    mem_limit: 768m
+
+    # No logging block on purpose. /etc/docker/daemon.json sets rotation
+    # daemon-wide at 50 MB x 5, and this container inherits it.

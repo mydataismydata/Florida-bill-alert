@@ -1,0 +1,16 @@
+# Copy to docker-compose.override.yml on the server. Never committed.
+#
+# Compose merges this over docker-compose.yml with no flag needed, which is
+# what keeps a deploy to `git pull`, `docker compose build`, `docker compose
+# up -d` with nothing to re-apply.
+#
+# One trap. Compose CONCATENATES ports across files rather than replacing them.
+# Adding a `ports:` list here without `!override` leaves the base file's
+# binding in place alongside the new one, which is how a port ends up published
+# on 0.0.0.0 by accident. There is no reason to set ports here at all.
+services:
+  php:
+    environment:
+      # Read by nothing in the application today. Present so the container
+      # carries a note of which host it is, for anyone reading `docker inspect`.
+      SESSIONWATCH_HOST: kyl.sjcrlc.org

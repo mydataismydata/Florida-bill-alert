@@ -10,3 +10,7 @@ public/config.php
 .working/
 .deploy/
 .env
+
+# server-side only: relay credentials, and settings that belong to one machine
+deploy/ovh/msmtprc
+deploy/ovh/docker-compose.override.yml
