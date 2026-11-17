@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS analysis_ai (
     one_line TEXT, summary TEXT, who_is_affected TEXT,
     reading TEXT, provisions TEXT, implications TEXT, unclear TEXT,
     dropped TEXT, flagged TEXT, failures TEXT, stats TEXT,
+    corrections TEXT DEFAULT '[]',
     PRIMARY KEY (session, num)
 );
 
@@ -173,7 +174,8 @@ class Store:
     # CREATE TABLE IF NOT EXISTS leaves an existing table alone, so a column
     # added later never reaches a database that predates it.
     _ADDED = (("member", "nickname", "TEXT DEFAULT ''"),
-              ("sponsor_finance", "member_url", "TEXT DEFAULT ''"))
+              ("sponsor_finance", "member_url", "TEXT DEFAULT ''"),
+              ("analysis_ai", "corrections", "TEXT DEFAULT '[]'"))
 
     def _add_missing_columns(self) -> None:
         for table, column, decl in self._ADDED:
@@ -344,14 +346,15 @@ class Store:
             "INSERT OR REPLACE INTO analysis_ai"
             " (session,num,version,model,one_line,summary,who_is_affected,"
             "  reading,provisions,implications,unclear,dropped,flagged,"
-            "  failures,stats)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "  failures,stats,corrections)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (a.session, a.num, a.version, a.model,
              a.summary.get("one_line", ""),
              j(a.summary.get("summary", [])),
              j(a.summary.get("who_is_affected", [])), a.reading,
              j(a.provisions), j(a.implications), j(a.unclear),
-             j(a.dropped), j(a.flagged), j(a.failures), j(a.stats)))
+             j(a.dropped), j(a.flagged), j(a.failures), j(a.stats),
+             j(getattr(a, "corrections", []))))
         self.db.execute("COMMIT")
 
     def load_analysis(self, session: str, num: int):
@@ -363,7 +366,8 @@ class Store:
             return None
         out = dict(row)
         for k in ("summary", "who_is_affected", "provisions", "implications",
-                  "unclear", "dropped", "flagged", "failures", "stats"):
+                  "unclear", "dropped", "flagged", "failures", "stats",
+                  "corrections"):
             try:
                 out[k] = _json.loads(out[k] or "[]")
             except Exception:

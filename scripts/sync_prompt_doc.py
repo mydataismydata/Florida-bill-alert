@@ -30,10 +30,10 @@ END = "<!-- END GENERATED PROMPT -->"
 def section() -> str:
     rows = "\n".join(
         f"| `{n}` | {P.BUDGET[n]} | `{', '.join(P.SCHEMAS[n].get('required', []))}` |"
-        for n in P.ORDER)
+        for n in P.SCHEMAS)
     schemas = "\n\n".join(
         f"`{n}`\n\n```json\n{json.dumps(P.SCHEMAS[n], indent=2)}\n```"
-        for n in P.ORDER)
+        for n in P.SCHEMAS)
     return f"""{START}
 ## The prompt, verbatim
 
@@ -41,7 +41,7 @@ Generated from `src/flba/analysis/passes.py` by `scripts/sync_prompt_doc.py`.
 A test fails if the two fall out of step, so this is the text the model is
 actually given -- not a description of it.
 
-The system message is identical for all three passes; only a short task
+The system message is identical for every pass; only a short task
 selector at the end of the user turn differs, which is what keeps the cached
 prefix usable.
 
@@ -49,7 +49,7 @@ prefix usable.
 {P.SYSTEM.rstrip()}
 ```
 
-### The three passes
+### The passes
 
 | pass | max tokens | required fields |
 |---|---:|---|

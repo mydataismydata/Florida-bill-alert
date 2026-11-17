@@ -13,6 +13,7 @@ from .brief import build as build_brief
 from .brief import chunks as brief_chunks
 from .brief import header as brief_header
 from .brief import readings
+from .check import check
 from .verify import Verifier, is_degenerate, verify_claims
 
 # Models return the citation both ways -- "493.6102" and "s. 493.6102" -- and
@@ -80,11 +81,22 @@ class Analysis:
     dropped: list = field(default_factory=list)
     flagged: list = field(default_factory=list)
     failures: list = field(default_factory=list)
+    corrections: list = field(default_factory=list)
     reading: str = ""
     stats: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         return {k: v for k, v in self.__dict__.items()}
+
+
+def _take_check(out: Analysis, res, totals: dict, **where) -> None:
+    """Fold one check's result into the analysis and the running totals."""
+    out.corrections += [dict(c, **where) for c in res.corrections]
+    out.dropped += [dict(d, pass_name="check", **where) for d in res.removed]
+    out.failures += res.failures
+    for key, value in res.stats.items():
+        totals[key] = (max(totals.get(key, 0), value) if key == "rounds"
+                       else totals.get(key, 0) + value)
 
 
 def digest(bill: dict, refs: list, provisions: list) -> str:
@@ -123,6 +135,45 @@ def _dedupe(claims: list, field: str = "quote") -> list:
     return out
 
 
+def requote(name: str, claims: list, verifier: Verifier, backend: Backend,
+            brief_text: str, log=lambda *_: None) -> tuple[list, list]:
+    """Verify the quotes, then ask again for the claims that failed.
+
+    Claims that already verified are held across the retry and deduped
+    against whatever comes back, so a second look can only add. The model is
+    told which quotes were rejected and why, because the same input returns
+    the same bytes under greedy decoding and the note is what changes it.
+
+    Returns the surviving claims and every failure across every attempt. The
+    failures accumulate rather than being replaced: what was dropped stays
+    visible, which is the whole point of recording it.
+    """
+    kept, dropped = verify_claims(claims, verifier)
+    failed = list(dropped)
+    for attempt in range(P.QUOTE_RETRY_LIMIT):
+        if not dropped:
+            break
+        reply = backend.chat(
+            P.messages(brief_text, name, P.quote_retry_note(dropped)),
+            schema=P.SCHEMAS[name], max_tokens=P.BUDGET[name])
+        why = is_degenerate(reply.text)
+        if why is not None:
+            log(f"    {name}: requote {attempt + 1} unusable ({why})")
+            break
+        try:
+            parsed = P.trim_cut(reply.json(), P.SCHEMAS[name])
+        except json.JSONDecodeError:
+            log(f"    {name}: requote {attempt + 1} unparseable")
+            break
+        recovered, dropped = verify_claims(parsed.get(name, []), verifier)
+        failed += dropped
+        before = len(kept)
+        kept = _dedupe(kept + recovered)
+        log(f"    {name}: requote {attempt + 1} recovered {len(kept) - before}"
+            f", {len(dropped)} still unverified")
+    return kept, failed
+
+
 def analyze_in_parts(db, bill, version, diff, refs, backend, budget, log,
                      out) -> Analysis:
     """Read a bill too long for one request, a part at a time.
@@ -139,6 +190,7 @@ def analyze_in_parts(db, bill, version, diff, refs, backend, budget, log,
 
     prov: list = []
     impl: list = []
+    checked: dict = {}
     for part in parts:
         for name in ("provisions", "implications"):
             reply = backend.chat(P.messages(part["text"], name),
@@ -149,17 +201,26 @@ def analyze_in_parts(db, bill, version, diff, refs, backend, budget, log,
                                      "reason": is_degenerate(reply.text)})
                 continue
             try:
-                data = reply.json()
+                data = P.trim_cut(reply.json(), P.SCHEMAS[name])
             except json.JSONDecodeError:
                 out.failures.append({"pass": name, "part": part["part"],
                                      "reason": "unparseable JSON"})
                 continue
-            kept, dropped = verify_claims(data.get(name, []), verifier)
+            kept, dropped = requote(name, data.get(name, []), verifier,
+                                    backend, part["text"], log)
             out.dropped += [dict(d, pass_name=name, part=part["part"])
                             for d in dropped]
             if name == "provisions":
                 for c in kept:
                     c["statute"] = tidy_statute(c.get("statute", ""))
+                # Checked against the part it was read from: no request
+                # can hold the whole bill, which is why it is in parts.
+                if kept:
+                    res = check(None, kept, part["text"], verifier, backend,
+                                deleted_text, log,
+                                where=f" part {part['part']}")
+                    _take_check(out, res, checked, part=part["part"])
+                    kept = res.provisions
                 prov += kept
             else:
                 for c in kept:
@@ -189,7 +250,7 @@ def analyze_in_parts(db, bill, version, diff, refs, backend, budget, log,
         why = is_degenerate(reply.text)
         if why is None:
             try:
-                data = reply.json()
+                data = P.trim_cut(reply.json(), P.SCHEMAS["summary"])
             except json.JSONDecodeError:
                 why = "unparseable JSON"
             else:
@@ -201,6 +262,15 @@ def analyze_in_parts(db, bill, version, diff, refs, backend, budget, log,
         out.failures.append({"pass": "summary", "attempt": attempt + 1,
                              "reason": why, "reduced": True})
         note = P.retry_note(why)
+
+    # The summary was written from the digest, so that is what it is checked
+    # against. Each provision in it carries a quote already verified.
+    if out.summary:
+        res = check(out.summary, [], text, verifier, backend, deleted_text,
+                    log, where=" summary")
+        _take_check(out, res, checked)
+        out.summary = res.summary
+    out.stats["check"] = checked
     return out
 
 
@@ -220,7 +290,10 @@ def analyze(db, session: str, num: int, backend: Backend,
         t0 = time.time()
         res = analyze_in_parts(db, bill, version, diff, refs, backend, budget,
                                log, out0)
-        total = len(res.provisions) + len(res.implications) + len(res.dropped)
+        # A provision the check removed had a genuine quote, so it is not a
+        # verification failure and stays out of the rate.
+        quote_drops = sum(1 for d in res.dropped if d.get("pass_name") != "check")
+        total = len(res.provisions) + len(res.implications) + quote_drops
         res.stats = {
             "seconds": round(time.time() - t0, 1),
             "brief_chars": len(brief["text"]),
@@ -231,7 +304,8 @@ def analyze(db, session: str, num: int, backend: Backend,
             "claims_dropped": len(res.dropped),
             "claims_flagged": len(res.flagged),
             "pass_failures": len(res.failures),
-            "verify_rate": round(1 - len(res.dropped) / total, 3) if total else None,
+            "verify_rate": round(1 - quote_drops / total, 3) if total else None,
+            "check": res.stats.get("check", {}),
         }
         return res
 
@@ -260,7 +334,7 @@ def analyze(db, session: str, num: int, backend: Backend,
             why = is_degenerate(reply.text)
             if why is None:
                 try:
-                    parsed = reply.json()
+                    parsed = P.trim_cut(reply.json(), P.SCHEMAS[name])
                 except json.JSONDecodeError:
                     why = "unparseable JSON"
                 else:
@@ -288,13 +362,18 @@ def analyze(db, session: str, num: int, backend: Backend,
         if name == "summary":
             out.summary = data
         elif name == "provisions":
-            kept, dropped = verify_claims(data.get("provisions", []), verifier)
+            kept, dropped = requote(name, data.get("provisions", []),
+                                    verifier, backend, text, log)
             for claim in kept:
                 claim["statute"] = tidy_statute(claim.get("statute", ""))
-            out.provisions = kept
+            # A retry can only add, so the cap the schema declares has to be
+            # applied here too -- nothing else stops a second ask publishing
+            # more than a single request could have returned.
+            out.provisions = kept[:P.PROVISION_CAP]
             out.dropped += [dict(d, pass_name=name) for d in dropped]
         elif name == "implications":
-            kept, dropped = verify_claims(data.get("implications", []), verifier)
+            kept, dropped = requote(name, data.get("implications", []),
+                                    verifier, backend, text, log)
             # a claim about motive is removed even when its quote is genuine
             clean = []
             for claim in kept:
@@ -305,12 +384,23 @@ def analyze(db, session: str, num: int, backend: Backend,
                     out.flagged.append(dict(claim, flagged_for=hit))
                 else:
                     clean.append(claim)
-            out.implications = clean
+            out.implications = clean[:P.IMPLICATION_CAP]
             out.reading = data.get("reading", "")
             out.unclear = data.get("unclear", [])
             out.dropped += [dict(d, pass_name=name) for d in dropped]
 
-    total = len(out.provisions) + len(out.implications) + len(out.dropped)
+    # The passes above check quotes, not the prose a reader sees beside them.
+    checked: dict = {}
+    if out.summary or out.provisions:
+        res = check(out.summary, out.provisions, brief["text"], verifier,
+                    backend, deleted_text, log)
+        _take_check(out, res, checked)
+        out.summary, out.provisions = res.summary, res.provisions
+
+    # A provision the check removed had a genuine quote, so it is not a
+    # verification failure and stays out of the rate.
+    quote_drops = sum(1 for d in out.dropped if d.get("pass_name") != "check")
+    total = len(out.provisions) + len(out.implications) + quote_drops
     out.stats = {
         "seconds": round(time.time() - t0, 1),
         "brief_chars": len(brief["text"]),
@@ -321,6 +411,7 @@ def analyze(db, session: str, num: int, backend: Backend,
         "claims_dropped": len(out.dropped),
         "claims_flagged": len(out.flagged),
         "pass_failures": len(out.failures),
-        "verify_rate": round(1 - len(out.dropped) / total, 3) if total else None,
+        "verify_rate": round(1 - quote_drops / total, 3) if total else None,
+        "check": checked,
     }
     return out

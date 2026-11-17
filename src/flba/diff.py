@@ -282,13 +282,80 @@ class ContextBlock:
         return sum(1 for p in self.parts if p.kind != PLAIN)
 
 
+# A sentence ends at a full stop, question or exclamation mark -- with any
+# closing quote and a section catchline's dash -- before a capital or "(".
+# "s. 456.072" and "F.S." are not ends; statute text is full of both. Text
+# taken from the bill's PDF sometimes loses the space at a line break --
+# "an effective date.Be It Enacted" -- so a capitalised word straight after
+# the stop also counts; "U.S.C." does not, because "S" is followed by a stop.
+_SENTENCE_END = re.compile(r"[.!?][\"'”’)]?(?:—|--)?"
+                           r"(?:\s+(?=[A-Z(\"“])|(?=[A-Z][a-z]))")
+_NOT_AN_END = frozenset("s ss f.s u.s u.s.c e.g i.e fla stat no nos st inc co "
+                        "corp jr sr dr mr ms mrs vs v ch art sec".split())
+# How far back to look for the start of a sentence before giving up and
+# keeping the old start. Statute sentences run long, but not this long.
+_SENTENCE_REACH = 600
+
+
+def _back_to_sentence(segs: list[Segment], lo: int) -> tuple[int, int]:
+    """Move a block's start back to the beginning of the sentence it opens in.
+
+    Looks only at text before the old start, so a block never loses a
+    sentence it already showed. Returns the index of the new first segment and
+    how many of its characters to skip. Only unmarked text is cut: a deletion
+    or insertion is shown whole or not at all.
+    """
+    j, reach = lo, 0
+    while j > 0 and reach < _SENTENCE_REACH:
+        j -= 1
+        reach += len(segs[j].text)
+    # Segments are joined with a space, as the brief prints them, plus the
+    # first characters of the old start so a sentence ending right before it
+    # is still seen as one.
+    starts, pos = [], 0
+    for k in range(j, lo):
+        starts.append(pos)
+        pos += len(segs[k].text) + 1
+    boundary = pos
+    window = " ".join(s.text for s in segs[j:lo]) + " " + segs[lo].text[:3]
+
+    cut = None
+    for m in _SENTENCE_END.finditer(window):
+        if m.end() > boundary:
+            break
+        word = re.search(r"([\w.]+)$", window[:m.start()])
+        if word and (word.group(1).lower() in _NOT_AN_END or len(word.group(1)) == 1):
+            continue
+        cut = m.end()
+
+    if cut is None:
+        # No sentence end within reach: the sentence began at the top of the
+        # document, or is too long to chase. Keep the old start in that case.
+        return (0, 0) if j == 0 and reach < _SENTENCE_REACH else (lo, 0)
+    if cut >= boundary:
+        return lo, 0                      # the block already opens a sentence
+    k = max(i for i, s in enumerate(starts) if s <= cut)
+    seg, off = segs[j + k], cut - starts[k]
+    if off >= len(seg.text):
+        return j + k + 1, 0
+    return (j + k, off) if seg.kind == PLAIN else (j + k, 0)
+
+
 def context_blocks(diff: BillDiff, pad: int = 220,
-                   max_blocks: int = 0, join_gap: int = 400) -> list[ContextBlock]:
+                   max_blocks: int = 0, join_gap: int = 400,
+                   whole_sentences: bool = False) -> list[ContextBlock]:
     """Group each change with the text around it.
 
     Changes closer together than `join_gap` characters share one block, so a
     heavily edited sentence reads as one passage rather than being repeated
     once per altered word.
+
+    With `whole_sentences`, each block starts where its first sentence does
+    rather than at a line break. Line breaks fall mid-sentence: SB 192's block
+    opened "patient, the value of which is greater than $501", and a model
+    shown only that could not say what the $501 applied to -- the subject,
+    "Failing to preserve identity of funds and property of a", was on the line
+    before.
     """
     segs = diff.segments
     if not segs:
@@ -299,7 +366,7 @@ def context_blocks(diff: BillDiff, pad: int = 220,
         return []
 
     # walk outward from each change until the character budget is spent
-    spans: list[tuple[int, int]] = []
+    spans: list[tuple[int, int, int]] = []
     for i in marked:
         lo = hi = i
         budget = pad
@@ -310,18 +377,25 @@ def context_blocks(diff: BillDiff, pad: int = 220,
         while hi < len(segs) - 1 and budget > 0:
             hi += 1
             budget -= len(segs[hi].text)
-        spans.append((lo, hi))
+        skip = 0
+        if whole_sentences:
+            lo, skip = _back_to_sentence(segs, lo)
+        spans.append((lo, hi, skip))
 
     merged: list[list[int]] = []
-    for lo, hi in spans:
+    for lo, hi, skip in spans:
         if merged and lo <= merged[-1][1] + 1:
             merged[-1][1] = max(merged[-1][1], hi)
         else:
-            merged.append([lo, hi])
+            merged.append([lo, hi, skip])
 
     blocks = []
-    for lo, hi in merged:
+    for lo, hi, skip in merged:
         parts = segs[lo:hi + 1]
+        if skip:
+            first = parts[0]
+            parts = [Segment(first.kind, first.text[skip:], first.line, first.page),
+                     *parts[1:]]
         line = next((p.line for p in parts if p.line), None)
         page = next((p.page for p in parts if p.page), None)
         blocks.append(ContextBlock(line=line, page=page, parts=list(parts)))

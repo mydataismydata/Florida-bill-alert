@@ -195,7 +195,8 @@ def _load_ai(db, session, num):
         return None
     out = dict(row)
     for key in ("summary", "who_is_affected", "provisions", "implications",
-                "unclear", "dropped", "flagged", "failures", "stats"):
+                "unclear", "dropped", "flagged", "failures", "stats",
+                "corrections"):
         try:
             out[key] = json.loads(out[key] or "[]")
         except Exception:

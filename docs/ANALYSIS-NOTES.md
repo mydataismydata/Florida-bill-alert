@@ -27,6 +27,22 @@ A second, deterministic guard removes claims that speculate about motive, even
 when their quote is genuine. Describing what text permits is checkable;
 guessing at intent is not.
 
+A quote proves the words are in the bill. It proves nothing about the prose
+written beside it, and the summary has no quote at all. So a check pass reads
+the finished headline, summary and provision effects back against the same
+brief, one numbered sentence at a time, and marks each one as agreeing with
+the bill or wrong. An objection must quote the bill words that show the
+sentence wrong, and one whose quote is not in the bill is ignored. A wrong
+sentence is replaced by the correction offered, or removed when none is, and
+the corrected draft is read once more. Every change is kept in the
+`corrections` column with its old and new wording.
+
+The two errors that prompted it: HB 1461 strikes "municipal" from "each
+municipal electric utility shall submit", which puts every electric utility
+under the duty, and the summary said municipal utilities "no longer must
+file". SB 166 strikes "and provide treatment" from what a provider may do
+without a parent's consent, and the summary still said "examined and treated".
+
 ## Prompt layout is a performance decision
 
 The server reuses a cached prompt prefix only when the part that differs
@@ -83,7 +99,7 @@ Generated from `src/flba/analysis/passes.py` by `scripts/sync_prompt_doc.py`.
 A test fails if the two fall out of step, so this is the text the model is
 actually given -- not a description of it.
 
-The system message is identical for all three passes; only a short task
+The system message is identical for every pass; only a short task
 selector at the end of the user turn differs, which is what keeps the cached
 prefix usable.
 
@@ -99,8 +115,17 @@ Rules you must follow:
 - [[+text+]] is language being ADDED to Florida law. [[-text-]] is language being DELETED from it. Unmarked text is existing law, shown for context, and is NOT changing.
 - Read direction off the markers, never off the words inside them. A prohibition inside [[+ +]] is a NEW restriction the bill creates; those same words inside [[- -]] would be an existing restriction it repeals. Calling added language a removal states the exact opposite of what the bill does.
 - Deletions are easy to miss and often matter, so say plainly when a requirement, protection or limit is being repealed -- but only when those words sit inside [[- -]]. A bill that deletes nothing of substance repeals nothing. Do not reach for a repeal that is not there.
+- Words inside [[- -]] stop being law when the bill passes. Never describe struck words as something the law still allows or requires.
 - Many marked edits are punctuation, renumbering or cross-reference updates. A deleted comma is not a repeal, and a semicolon replacing a comma changes nothing at all -- least of all the clause that happens to follow it. Judge an edit by the words it changes.
 - Never speculate about anyone's motives, party, or intent. Describe what the text does and what it permits.
+
+How to write. These rules apply to every prose field in every task:
+- One idea per sentence, and at most 25 words in any sentence. If a sentence needs a dash, a semicolon or a second "and" to carry another idea, write two sentences.
+- Active voice. Name who acts, then what they must, may or cannot do: "The county must hold a hearing", not "A hearing must be held".
+- Start with the point. Never open a sentence or paragraph with a label such as "The biggest change:", "Second:", "Finally,", "Note:" or "Practical effect:".
+- Write only your conclusions. Never show your working: no "Hmm", no "Actually", no "Let me", and no questions to yourself about the text.
+- Use your own plain words. The bill's exact language belongs in the quote field, not in the summary, the effect or the consequence.
+- Shorter must never mean looser. Keep each legal term exactly as the bill uses it ("may not", "shall", "quasi-judicial"). Keep every limiting word -- "only", "further", "unless", "except", "not". Dropping one changes what the clause does.
 
 How Florida drafts. These words are terms of art and do not carry their ordinary-English force:
 - "MAY NOT" and "SHALL NOT" are BOTH mandatory prohibitions, equal in effect. "May not" is the form Florida prefers and is far more common in the statutes. It NEVER means "is permitted not to", and a prohibition is not weaker for using it. If the text says an assessment "may not be levied", then levying it is forbidden.
@@ -112,6 +137,8 @@ Never argue that a prohibition is weak, optional or merely advisory because of w
 Before saying what a deletion does, decide what kind of clause was struck -- the kind decides the direction, and getting it wrong states the exact opposite of what the bill does:
 - A GRANT OF AUTHORITY struck ("may apply for ...") means that route is gone.
 - A RESTRICTIVE QUALIFIER struck ("of a 501(c)(3) organization") means scope WIDENS to reach more than before -- not less.
+- A struck word that narrows WHO a duty falls on ("each [[-county-]] hospital shall report") widens the duty to everyone the noun still names: every hospital must now report, county hospitals included. Striking the word releases no one from the duty.
+- A struck NAME in a list of who must act ("each hospital [[-and clinic-]] shall report") does not show that group is free of the duty. A word the bill keeps, such as "hospital", "utility" or "provider", may still cover it through a definition the bill does not show. Say whom the duty now names, in the bill's words, and never say the struck group no longer has it.
 - A PRECONDITION struck ("after assurances have been provided") means the condition is gone, not that the underlying duty vanished.
 - A CEILING struck ("may not exceed $1,500") means the limit is lifted; whatever duty sits under it is unchanged. A ceiling written as "may not exceed" or "shall not exceed" is not a prohibition on the underlying act: "compensation may not exceed 125 percent of the Medicare rate" permits everything under that cap, and striking the clause raises or removes the cap -- it does not forbid compensation.
 
@@ -124,22 +151,42 @@ The one-line field must be a SHORT verb phrase naming the single most important 
 
 Then give two to four SHORT paragraphs of 25-45 words, one point each. Do not write a single long block.
 
+The style, shown on an invented bill. Copy its shape and length, never its facts:
+  one_line: Lets pharmacists renew a maintenance prescription without a new order.
+  summary:
+  - A pharmacist may renew a maintenance prescription once, for up to 90 days, without contacting the prescriber. The patient must have filled it for at least six months.
+  - The renewal is not allowed for controlled substances. The pharmacist must tell the prescriber about each renewal within 7 days.
+
 TASK provisions
-List the provisions that matter, most important first. Include a provision only if it changes what someone may, must, or cannot do. Skip renumbering, cross-reference updates and effective-date clauses unless they change substance. Prefer four well-chosen provisions to twelve trivial ones. Quote the exact language each one rests on.
+List the provisions that matter, most important first. Include a provision only if it changes what someone may, must, or cannot do. Skip renumbering, cross-reference updates and effective-date clauses unless they change substance. Prefer four well-chosen provisions to twelve trivial ones. Quote the exact language each one rests on. Write each heading in under 10 words and each effect in one or two short sentences.
 
 TASK implications
-Identify what this language would permit or require in practice. You are describing the reach of the text, not anyone's plans. For each entry, name a concrete situation the wording allows, and quote the words that allow it. Pay attention to: discretion granted without a standard to meet, terms left undefined, removed notice or review requirements, and penalties or duties whose scope is broader than the bill's stated subject.
+Identify what this language would permit or require in practice. You are describing the reach of the text, not anyone's plans. For each entry, name a concrete situation the wording allows, in one or two short sentences, and quote the words that allow it. Pay attention to: discretion granted without a standard to meet, terms left undefined, removed notice or review requirements, and penalties or duties whose scope is broader than the bill's stated subject.
 
 If the text is narrow and its effects are plain, return few entries or none. Do not manufacture concerns. Never suggest what any person, party or sponsor wants -- only what the words themselves would allow.
+
+TASK check
+The message ends with a DRAFT someone wrote about this bill, as numbered sentences. Check each sentence against the bill text, one at a time. Return one entry for every numbered sentence, in order.
+
+Mark a sentence "wrong" only when the bill text shows that it is false. Look for these mistakes:
+- It says the law still allows or requires something whose words sit inside [[- -]].
+- It says a group no longer has a duty because the bill strikes the group's name, or a word that narrowed who had the duty. If the bill still gives the duty to a broader word, such as "utility" or "provider", that word may still cover the group.
+- It reverses who may, must or cannot act, or reads a prohibition as a permission.
+- It gets a number, date, deadline or amount wrong.
+- It says the opposite of the bill in any other way.
+A sentence that leaves something out, could be worded better, or stresses a different point is NOT wrong. Mark it "agrees".
+
+For a wrong sentence, say what is wrong in one sentence. Quote the exact bill words that show it, copied without the markers. Then write a corrected sentence in the same short, plain style, and keep everything in it that was right. A corrected headline must still be a 6-to-12-word verb phrase. If the sentence cannot be put right, leave the fix empty and it will be removed. For a sentence that agrees, leave problem, quote and fix empty.
 ```
 
-### The three passes
+### The passes
 
 | pass | max tokens | required fields |
 |---|---:|---|
-| `summary` | 900 | `one_line, summary, who_is_affected` |
-| `provisions` | 2000 | `provisions` |
-| `implications` | 2000 | `reading, implications, unclear` |
+| `summary` | 1800 | `one_line, summary, who_is_affected` |
+| `provisions` | 4000 | `provisions` |
+| `implications` | 4000 | `reading, implications, unclear` |
+| `check` | 4000 | `checks` |
 
 ### Schemas
 
@@ -167,7 +214,7 @@ model at all.
       "items": {
         "type": "string",
         "minLength": 60,
-        "maxLength": 400
+        "maxLength": 800
       },
       "description": "Short paragraphs, ONE point each, 25-45 words. Start with what the bill does, then what it removes or restricts, then who decides what afterwards. Never combine points into one paragraph."
     },
@@ -206,7 +253,7 @@ model at all.
           "heading": {
             "type": "string",
             "minLength": 8,
-            "maxLength": 120,
+            "maxLength": 240,
             "description": "Under 10 words."
           },
           "effect": {
@@ -218,7 +265,7 @@ model at all.
           "quote": {
             "type": "string",
             "minLength": 25,
-            "maxLength": 180,
+            "maxLength": 360,
             "description": "A SHORT contiguous span of operative language copied EXACTLY from the bill text, without the [[+ +]] or [[- -]] markers. 6 to 25 words. Do not join text from two places, do not trim words from the middle, and do not quote the bill title. If you cannot copy it exactly, choose a shorter span you can."
           },
           "statute": {
@@ -274,13 +321,13 @@ model at all.
           "consequence": {
             "type": "string",
             "minLength": 60,
-            "maxLength": 700,
+            "maxLength": 1400,
             "description": "A concrete situation this language would permit or require. Describe the text's effect. Never state or imply what any person or party wants or intends."
           },
           "quote": {
             "type": "string",
             "minLength": 25,
-            "maxLength": 180,
+            "maxLength": 360,
             "description": "A SHORT contiguous span of operative language copied EXACTLY from the bill text, without the [[+ +]] or [[- -]] markers. 6 to 25 words. Do not join text from two places, do not trim words from the middle, and do not quote the bill title. If you cannot copy it exactly, choose a shorter span you can."
           },
           "certainty": {
@@ -315,6 +362,61 @@ model at all.
     "reading",
     "implications",
     "unclear"
+  ]
+}
+```
+
+`check`
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "checks": {
+      "type": "array",
+      "maxItems": 80,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "n": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 99
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "agrees",
+              "wrong"
+            ]
+          },
+          "problem": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 360
+          },
+          "fix": {
+            "type": "string",
+            "maxLength": 600
+          }
+        },
+        "required": [
+          "n",
+          "verdict",
+          "problem",
+          "quote",
+          "fix"
+        ]
+      }
+    }
+  },
+  "required": [
+    "checks"
   ]
 }
 ```

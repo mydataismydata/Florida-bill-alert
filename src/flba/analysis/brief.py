@@ -101,7 +101,7 @@ def build(bill: dict, diff: BillDiff, refs: list[dict],
     """Return {'text': brief, 'truncated': bool, 'passages': n_shown}."""
     lines = header(bill, refs)
 
-    blocks = context_blocks(diff)
+    blocks = context_blocks(diff, whole_sentences=True)
     # Substance concentrates in the biggest edits, so when the budget binds,
     # keep those and say so rather than silently cutting the tail.
     ordered = sorted(enumerate(blocks), key=lambda kv: -kv[1].changed)
@@ -177,7 +177,7 @@ def chunks(bill: dict, diff: BillDiff, refs: list[dict],
     belongs to, and says which part it is, so the model does not describe a
     fragment as though it were the whole act.
     """
-    blocks = context_blocks(diff)
+    blocks = context_blocks(diff, whole_sentences=True)
     bodies = [(blk, render_passage(blk.parts)) for blk in blocks]
 
     groups: list[list] = []

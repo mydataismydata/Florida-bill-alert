@@ -31,10 +31,13 @@ from __future__ import annotations
 # wandered -- the model stitching across a gap or paraphrasing the tail. A
 # short contiguous span is both easier to copy exactly and easier for a reader
 # to find, so the ceiling is part of the contract.
+#
+# Raised from 180 to test GLM 5.3 Flash, which writes past 180 and was cut
+# mid-word -- "from the purchaser" became "from thep 1" and failed the check.
 QUOTE = {
     "type": "string",
     "minLength": 25,
-    "maxLength": 180,
+    "maxLength": 360,
     "description": ("A SHORT contiguous span of operative language copied "
                     "EXACTLY from the bill text, without the [[+ +]] or "
                     "[[- -]] markers. 6 to 25 words. Do not join text from two "
@@ -81,7 +84,9 @@ SUMMARY = {
         # one idea each.
         "summary": {
             "type": "array", "minItems": 2, "maxItems": 4,
-            "items": {"type": "string", "minLength": 60, "maxLength": 400},
+            # Raised from 400 to test GLM 5.3 Flash, whose paragraphs ran past
+            # 400 and were cut mid-sentence, the rest spilling into the next.
+            "items": {"type": "string", "minLength": 60, "maxLength": 800},
             "description": ("Short paragraphs, ONE point each, 25-45 words. "
                             "Start with what the bill does, then what it "
                             "removes or restricts, then who decides what "
@@ -116,7 +121,7 @@ PROVISIONS = {
                     # These sit above the longest value seen in 322 provisions,
                     # so they stop a runaway without trimming real output.
                     "heading": {"type": "string", "minLength": 8,
-                                "maxLength": 120,
+                                "maxLength": 240,     # was 120; GLM test
                                 "description": "Under 10 words."},
                     "effect": {"type": "string", "minLength": 60,
                                "maxLength": 500,
@@ -161,7 +166,8 @@ IMPLICATIONS = {
                 "additionalProperties": False,
                 "properties": {
                     "consequence": {
-                        "type": "string", "minLength": 60, "maxLength": 700,
+                        "type": "string", "minLength": 60,
+                        "maxLength": 1400,            # was 700; GLM test
                         "description": ("A concrete situation this language would "
                                         "permit or require. Describe the text's "
                                         "effect. Never state or imply what any "
@@ -187,6 +193,39 @@ IMPLICATIONS = {
         },
     },
     "required": ["reading", "implications", "unclear"],
+}
+
+# The check pass re-reads each published sentence against the bill. It
+# answers for every sentence, not only the wrong ones: an empty list is the
+# cheapest valid answer, and a model that may return one will. A verdict per
+# sentence makes it look at each.
+#
+# No floors on problem, quote or fix, because a sentence that agrees has
+# none. An objection still has to quote the bill, and check.py ignores one
+# whose quote is not in the text.
+CHECK = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "checks": {
+            "type": "array",
+            "maxItems": 80,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "n": {"type": "integer", "minimum": 1, "maximum": 99},
+                    "verdict": {"type": "string", "enum": ["agrees", "wrong"]},
+                    "problem": {"type": "string", "maxLength": 400},
+                    "quote": {"type": "string",
+                              "maxLength": QUOTE["maxLength"]},
+                    "fix": {"type": "string", "maxLength": 600},
+                },
+                "required": ["n", "verdict", "problem", "quote", "fix"],
+            },
+        },
+    },
+    "required": ["checks"],
 }
 
 PASSES = {"summary": SUMMARY, "provisions": PROVISIONS, "implications": IMPLICATIONS}
