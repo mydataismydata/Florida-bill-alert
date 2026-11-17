@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -21,6 +22,23 @@ from .store import Store
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
 PACTRACK = "https://pactrack.sjcrlc.org"
+
+
+def load_env() -> None:
+    """Read .env if present, without overriding a real environment variable.
+
+    The same precedence scripts/deploy.sh and scripts/deploy.py use, so the
+    three cannot disagree. This is where the model server's key comes from.
+    """
+    path = ROOT / ".env"
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip("'\""))
 
 
 def _paths(session: str):
@@ -839,9 +857,9 @@ def cmd_analyze(args) -> int:
         return 0
 
     if not backend.available():
-        print(f"no model server at {args.base_url}\n"
-              f"start one with:\n"
-              f"  python -m mlx_vlm.server --model {args.model} --port 8080",
+        print(f"no model server answering at {args.base_url}\n"
+              f"  is oMLX open, with {args.model} loaded?\n"
+              f"  is FLBA_API_KEY in .env set to oMLX's key?",
               file=sys.stderr)
         return 2
 
@@ -968,6 +986,8 @@ def cmd_status(args) -> int:
 
 
 def main(argv=None) -> int:
+    load_env()
+    from .analysis.backend import DEFAULT_BASE_URL, DEFAULT_MODEL
     p = argparse.ArgumentParser(prog="flba")
     p.add_argument("--session", default="2026",
                    help="session year, e.g. 2026 or 2026E")
@@ -1033,10 +1053,14 @@ def main(argv=None) -> int:
                             help="only one area, by name or slug, e.g. "
                                  "'AI & Technology' or ai-technology; "
                                  "'none' for the bills no area claims")
-            sp.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
+            sp.add_argument("--base-url",
+                            default=os.environ.get("FLBA_BASE_URL",
+                                                   DEFAULT_BASE_URL))
             sp.add_argument("--model",
-                            default="mlx-community/Qwen3.8-27B-4bit")
-            sp.add_argument("--api-key", default=None)
+                            default=os.environ.get("FLBA_MODEL", DEFAULT_MODEL))
+            sp.add_argument("--api-key",
+                            default=os.environ.get("FLBA_API_KEY") or None,
+                            help="defaults to FLBA_API_KEY from .env")
         if name == "digest":
             sp.add_argument("--product", default="both",
                             choices=["daily", "weekly", "both"])

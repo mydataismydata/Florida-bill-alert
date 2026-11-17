@@ -4,14 +4,73 @@
   public host has no model, no pipeline and no database, so this must never
   reach it -- see the guard in scripts/deploy.sh.
 
-  A plain form, so it still works with JavaScript switched off: the server
-  redirects back to the bill when it is done. The script below upgrades it to
-  stay on the page and report progress.
+  A row of two buttons under the masthead. Editing opens the form
+  serve_local.py serves at /_edit/.
+
+  Re-running starts a job on the server and returns at once, so the reader can
+  leave the page while GLM works. The script disables the button, asks the
+  server how the job is doing every few seconds, and reloads the page when the
+  new analysis is in. Opening the bill again while the job runs shows the same
+  disabled button, because the state comes from the server, not the page.
+  Without JavaScript the form still posts, and the server sends the browser
+  back to the bill.
 #}
 {% macro repull(num) %}
-<form class="repull noprint" method="post" action="/_reanalyze/{{ num }}">
-  <button type="submit">Re-run the analysis</button>
-  <span class="repull-note">Runs the model on this machine — about a minute.
-    The page reloads when it finishes.</span>
-</form>
+<div class="adminbar noprint">
+  <form method="post" action="/_reanalyze/{{ num }}" data-rerun>
+    <button type="submit" class="btn">Re-run AI analysis</button>
+  </form>
+  <a class="btn ghost" href="/_edit/{{ num }}">Manually edit</a>
+  <span class="adminbar-status" aria-live="polite"></span>
+</div>
+<script>
+(function () {
+  var form = document.querySelector("[data-rerun]");
+  if (!form || !window.fetch) return;
+  var url = form.getAttribute("action");
+  var button = form.querySelector("button");
+  var note = form.parentNode.querySelector(".adminbar-status");
+  var label = button.textContent;
+  var watching = false;
+
+  function show(job) {
+    var state = (job && job.state) || "idle";
+    var busy = state === "queued" || state === "running";
+    button.disabled = busy;
+    button.textContent = state === "queued" ? "Queued…"
+                       : state === "running" ? "Re-running…" : label;
+    note.textContent =
+        state === "queued"  ? "Waiting for another bill to finish. You can leave this page."
+      : state === "running" ? "Started at " + job.started + ". You can leave this page; it keeps running."
+      : state === "failed"  ? "The last re-run failed at " + job.finished + ": " + job.error
+      : state === "done"    ? "Last re-run finished at " + job.finished + "."
+      : "";
+    return busy;
+  }
+
+  function poll() {
+    fetch(url, {headers: {Accept: "application/json"}, cache: "no-store"})
+      .then(function (r) { return r.json(); })
+      .then(function (job) {
+        if (show(job)) { watching = true; setTimeout(poll, 4000); }
+        else if (watching && job.state === "done") { location.reload(); }
+      })
+      .catch(function () { setTimeout(poll, 10000); });
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    button.disabled = true;
+    fetch(url, {method: "POST", headers: {Accept: "application/json"}})
+      .then(function (r) { return r.json(); })
+      .then(function (job) { show(job); watching = true; setTimeout(poll, 4000); })
+      .catch(function () {
+        button.disabled = false;
+        note.textContent = "Could not reach the server to start the re-run.";
+      });
+  });
+
+  poll();
+})();
+</script>
 {% endmacro %}

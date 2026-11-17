@@ -101,6 +101,13 @@ img { max-width: 100%; }
 .masthead.compact .wordmark { font-size: 19px; margin: 0; letter-spacing: .12em; }
 .masthead.compact nav { margin: 0; gap: 22px; }
 
+/* Operator controls, only in a --local build: a row under the masthead. */
+.adminbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  padding: 12px var(--pad); border-bottom: 1px solid var(--ru); }
+.adminbar form { margin: 0; }
+.adminbar .btn:disabled { opacity: .55; cursor: progress; }
+.adminbar-status { font: 400 11.5px var(--mono); color: var(--ink3); }
+
 /* ------------------------------------------------------------------ layout */
 .wrap { padding: 0 var(--pad); }
 .rule-top { border-top: 3px double var(--ru); }
@@ -501,7 +508,7 @@ input[type="radio"]:focus-visible + .radio { outline: 2px solid var(--acc); }
   :root { --bg0:#fff; --bg1:#fff; --ink:#000; --ink2:#222; --ink3:#555;
           --ru:#000; --ru2:#bbb; --acc:#6b4c00; --acc2:#6b4c00; }
   .masthead nav, .theme-toggle, .billhead .actions, .areastrip,
-  form.repull, .moreline { display: none !important; }
+  .adminbar, .moreline { display: none !important; }
   .fold { display: revert; }
   .billbody { grid-template-columns: 1fr; }
   a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 9px; }

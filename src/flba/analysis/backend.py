@@ -41,11 +41,18 @@ class Reply:
         return json.loads(self.text)
 
 
+# The analysis box is the Mac Studio, which serves GLM 5.3 Flash through
+# oMLX on its own loopback port. oMLX refuses requests without its API key,
+# which lives in .env as FLBA_API_KEY and never in the repository.
+DEFAULT_BASE_URL = "http://127.0.0.1:8000/v1"
+DEFAULT_MODEL = "GLM-5.3-Flash-oQ4e-mtp"
+
+
 @dataclass
 class Backend:
     """An OpenAI-compatible chat endpoint."""
-    base_url: str = "http://127.0.0.1:8080/v1"
-    model: str = "mlx-community/Qwen3.8-27B-4bit"
+    base_url: str = DEFAULT_BASE_URL
+    model: str = DEFAULT_MODEL
     api_key: str | None = None
     timeout: int = 1800
     temperature: float = 0.0
@@ -105,9 +112,14 @@ class Backend:
         raise RuntimeError(f"backend unreachable after {self.retries} tries: {last}")
 
     def available(self) -> bool:
+        # oMLX answers 401 to an unauthenticated /models, which used to read
+        # as "no server" even with the server up.
+        headers = ({"Authorization": f"Bearer {self.api_key}"}
+                   if self.api_key else {})
         try:
-            urllib.request.urlopen(
-                self.base_url.rstrip("/") + "/models", timeout=5).read()
+            urllib.request.urlopen(urllib.request.Request(
+                self.base_url.rstrip("/") + "/models", headers=headers),
+                timeout=5).read()
             return True
         except Exception:
             return False

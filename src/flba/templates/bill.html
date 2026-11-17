@@ -15,6 +15,7 @@
     <button type="button" class="theme-toggle" data-theme-toggle>DARK MODE</button>
   </nav>
 </header>
+{% if local %}{{ repull(b.num) }}{% endif %}
 {% endblock %}
 
 {% block body %}
@@ -139,7 +140,6 @@
     {% endif %}
     {% endif %}
 
-    {% if local %}{{ repull(b.num) }}{% endif %}
   </div>
 
   <div class="side">
