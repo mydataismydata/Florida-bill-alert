@@ -1,0 +1,109 @@
+{#
+  A list of members that can run past a hundred names: a bill's co-sponsors,
+  or one side of a roll call.
+
+  The line shows the first two and a count -- "Abbott, Albert + 112 others" --
+  and the count is a button that opens the whole list in a slide-out from the
+  right. The full list is in the page already, hidden, so the slide-out only
+  shows it, and print and find-in-page see every name. A list of three or
+  fewer is shown whole.
+
+  Each item is {"name", "slug", "party", "position", "district", "note"}. A
+  name links to the member's page when the roster matched it to one person.
+  A roll call shows the party, "Albritton (R) [President]"; a co-sponsor list
+  passes party=false. The slide-out adds the district a floor vote gives.
+
+  Imported "with context", because the links need `root`.
+#}
+{% macro entry(it, party=true, full=false) -%}
+{%- if it.slug %}<a href="{{ root }}member/{{ it.slug }}.html">{{ it.name }}</a>
+{%- else %}{{ it.name }}{% endif -%}
+{%- if party and it.party %} ({{ it.party }}){% endif -%}
+{%- if it.position %} [{{ it.position }}]{% endif -%}
+{%- if full and it.district %} <span class="dist">District {{ it.district }}</span>{% endif -%}
+{%- if it.note %} <span class="note">({{ it.note }})</span>{% endif -%}
+{%- endmacro %}
+
+{% macro namelist(id, title, line, items, party=true) %}
+<span class="names{{ ' has-full' if line.more }}">
+  {%- for it in line.shown %}{{ ', ' if not loop.first }}{{ entry(it, party) }}{% endfor -%}
+  {%- if line.more %} <button type="button" class="others" data-names="{{ id }}"
+          aria-haspopup="dialog" aria-controls="drawer" aria-expanded="false">+ {{ line.more }} others</button>
+  {%- endif -%}
+</span>
+{% if line.more %}
+<div class="names-full" id="{{ id }}" data-title="{{ title }}" hidden>
+  <p class="count">{{ items|length }} members</p>
+  <ol>{% for it in items %}<li>{{ entry(it, party, true) }}</li>{% endfor %}</ol>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro drawer() %}
+<div class="drawer-back" data-drawer-close hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true"
+       aria-labelledby="drawer-title" hidden>
+  <header>
+    <h2 id="drawer-title"></h2>
+    <button type="button" class="x" data-drawer-close aria-label="Close">×</button>
+  </header>
+  <div class="drawer-body"></div>
+</aside>
+<script>
+(function () {
+  var drawer = document.getElementById('drawer');
+  if (!drawer) return;
+  var back = document.querySelector('.drawer-back'),
+      title = document.getElementById('drawer-title'),
+      body = drawer.querySelector('.drawer-body'),
+      shut = drawer.querySelector('.x'),
+      opener = null, timer = null;
+
+  function open(button) {
+    var src = document.getElementById(button.getAttribute('data-names'));
+    if (!src) return;
+    clearTimeout(timer);
+    title.textContent = src.getAttribute('data-title');
+    body.innerHTML = src.innerHTML;
+    body.scrollTop = 0;
+    opener = button;
+    button.setAttribute('aria-expanded', 'true');
+    drawer.hidden = back.hidden = false;
+    // Shown first and moved a frame later, or it appears in place instead
+    // of sliding in.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        drawer.classList.add('open');
+        back.classList.add('open');
+      });
+    });
+    document.body.classList.add('drawer-on');
+    shut.focus();
+  }
+
+  function close() {
+    if (drawer.hidden) return;
+    drawer.classList.remove('open');
+    back.classList.remove('open');
+    document.body.classList.remove('drawer-on');
+    if (opener) {
+      opener.setAttribute('aria-expanded', 'false');
+      opener.focus();
+    }
+    timer = setTimeout(function () { drawer.hidden = back.hidden = true; }, 230);
+  }
+
+  document.addEventListener('click', function (e) {
+    var button = e.target.closest('[data-names]');
+    if (button) { e.preventDefault(); open(button); return; }
+    if (e.target.closest('[data-drawer-close]')) close();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (drawer.hidden) return;
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    // The close button is the one control inside, so focus stays on it.
+    else if (e.key === 'Tab') { e.preventDefault(); shut.focus(); }
+  });
+})();
+</script>
+{% endmacro %}

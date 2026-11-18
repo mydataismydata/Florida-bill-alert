@@ -146,7 +146,42 @@ CREATE TABLE IF NOT EXISTS analysis_ai (
     PRIMARY KEY (session, num)
 );
 
+-- Each member's vote on one roll call, read from the PDF the vote row links
+-- to (sources/rollcall.py). Keyed on that link, so re-pulling a bill page,
+-- which rewrites its vote rows, leaves these valid. code is Y, N, AV
+-- (abstain) or NV (no vote recorded). `after` is a vote cast after the roll
+-- call: on a floor record it is outside the tally, on a committee record
+-- ("VA") it is inside it.
+CREATE TABLE IF NOT EXISTS roll_call (
+    session TEXT, num INTEGER, url TEXT, seq INTEGER,
+    name TEXT, district INTEGER, code TEXT, excused INTEGER, after TEXT,
+    position TEXT DEFAULT '',      -- 'President', 'Chair', 'Vice Chair'
+    PRIMARY KEY (session, num, url, seq)
+);
+
+-- Every seat in both chambers, from each chamber's roster, so a name on a
+-- roll call or a co-sponsor list can be matched to a person, a party and a
+-- page. `member` holds only the senators who sponsored something. The House
+-- roster keeps a member who left mid-term beside the one who replaced them,
+-- so the key is the member's own page, not the district.
+CREATE TABLE IF NOT EXISTS legislator (
+    chamber TEXT, url TEXT,
+    name TEXT,          -- as the roster writes it: 'Leek, Thomas J. "Tom"'
+    display TEXT,       -- as the site shows it, and as its page is named
+    district INTEGER, party TEXT,
+    PRIMARY KEY (chamber, url)
+);
+
+-- What each roll call was on ("Passage · Third Reading", "Favorable") and
+-- the totals its PDF prints. A chamber can vote on one bill more than once.
+CREATE TABLE IF NOT EXISTS roll_call_info (
+    session TEXT, num INTEGER, url TEXT,
+    motion TEXT, yeas INTEGER, nays INTEGER, not_voting INTEGER,
+    PRIMARY KEY (session, num, url)
+);
+
 CREATE INDEX IF NOT EXISTS idx_change_bill ON change(session, num);
+CREATE INDEX IF NOT EXISTS idx_roll_call_bill ON roll_call(session, num);
 CREATE INDEX IF NOT EXISTS idx_statute ON statute_ref(session, statute);
 CREATE INDEX IF NOT EXISTS idx_bill_session ON bill(session);
 CREATE INDEX IF NOT EXISTS idx_hist_bill    ON history(session, num);
@@ -175,7 +210,8 @@ class Store:
     # added later never reaches a database that predates it.
     _ADDED = (("member", "nickname", "TEXT DEFAULT ''"),
               ("sponsor_finance", "member_url", "TEXT DEFAULT ''"),
-              ("analysis_ai", "corrections", "TEXT DEFAULT '[]'"))
+              ("analysis_ai", "corrections", "TEXT DEFAULT '[]'"),
+              ("roll_call", "position", "TEXT DEFAULT ''"))
 
     def _add_missing_columns(self) -> None:
         for table, column, decl in self._ADDED:
@@ -249,6 +285,33 @@ class Store:
                 "INSERT OR REPLACE INTO related VALUES (?,?,?,?,?,?,?,?)",
                 (s, n, r["label"], r["subject"], r["filed_by"],
                  r["relationship"], r["status"], r["url"]))
+        self.db.execute("COMMIT")
+
+    def save_roll_call(self, session, num, url, got) -> None:
+        members, printed = got["members"], got["printed"]
+        self.db.execute("BEGIN IMMEDIATE")
+        self.db.execute(
+            "INSERT OR REPLACE INTO roll_call_info VALUES (?,?,?,?,?,?,?)",
+            (session, num, url, got["motion"], printed.get("yeas"),
+             printed.get("nays"), printed.get("not_voting")))
+        self.db.execute("DELETE FROM roll_call WHERE session=? AND num=? AND url=?",
+                        (session, num, url))
+        for i, m in enumerate(members):
+            self.db.execute(
+                "INSERT INTO roll_call (session,num,url,seq,name,district,code,"
+                " excused,after,position) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (session, num, url, i, m["name"], m["district"], m["code"],
+                 int(bool(m["excused"])), m["after"], m.get("position", "")))
+        self.db.execute("COMMIT")
+
+    def save_legislators(self, chamber: str, rows: list[dict]) -> None:
+        self.db.execute("BEGIN IMMEDIATE")
+        self.db.execute("DELETE FROM legislator WHERE chamber=?", (chamber,))
+        for r in rows:
+            self.db.execute(
+                "INSERT OR REPLACE INTO legislator VALUES (?,?,?,?,?,?)",
+                (chamber, r["url"], r["name"], r["display"], r["district"],
+                 r["party"]))
         self.db.execute("COMMIT")
 
     def save_statute_refs(self, session, num, version, refs) -> None:

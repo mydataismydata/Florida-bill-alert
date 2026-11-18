@@ -46,6 +46,14 @@ class FetchResult:
         return self.path.read_text(encoding="utf-8", errors="replace")
 
 
+def _retry_after(resp) -> float:
+    """Seconds a Retry-After header asks for, or 0 when it gives none."""
+    try:
+        return min(float(resp.headers.get("Retry-After", "")), 600.0)
+    except ValueError:
+        return 0.0
+
+
 def _safe_segment(seg: str) -> str:
     """Make one URL path segment safe for the local filesystem."""
     out = []
@@ -144,6 +152,13 @@ class PoliteFetcher:
                 return FetchResult(url, path, resp.status_code,
                                    resp.headers.get("Content-Type", ""), 0, "", False)
             last_err = f"HTTP {resp.status_code}"
+            if resp.status_code == 429:
+                # The site asked us to slow down. The vote PDFs drew this
+                # after about 35 requests at one a second, so a few seconds
+                # of backoff is not enough: wait as long as it says, or a
+                # minute and more each time it repeats.
+                time.sleep(_retry_after(resp) or 60 * (attempt + 1))
+                continue
             time.sleep(2 ** attempt)
 
         return FetchResult(url, path, 0, f"error: {last_err}", 0, "", False)

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_repull.html" import repull %}
+{% import "_names.html" as names with context %}
 {% block title %}{{ b.label|billno }} — {{ b.title }}{% endblock %}
 {% block description %}{{ b.label|billno }}: {{ b.title|truncate(150) }}{% endblock %}
 
@@ -53,6 +54,11 @@
         {%- endif %}
       </div>
       {% endfor %}
+    </div></div>
+    {% endif %}
+    {% if cosponsors %}
+    <div class="row"><div class="k">CO-SPONSORS</div><div class="v">
+      {{ names.namelist('cosponsors', 'Co-sponsors of ' ~ b.label|billno, cosponsors_line, cosponsors, party=false) }}
     </div></div>
     {% endif %}
     {% if b.effective_date %}<div class="row"><div class="k">EFFECTIVE</div><div class="v">{{ b.effective_date }}</div></div>{% endif %}
@@ -140,6 +146,33 @@
     {% endif %}
     {% endif %}
 
+    {% if votes %}
+    {# Most recent first, like the timeline. A roll call whose PDF has not
+       been read shows the totals the Legislature states, and the PDF. #}
+    <div class="slabel">VOTES</div>
+    {% for v in votes %}
+    {% set vi = loop.index %}
+    <div class="vote">
+      <div class="vhead">
+        <span class="where">{{ v.where }}</span>
+        <span class="when">{{ v.date }}</span>
+        {% if v.motion %}<span class="motion">{{ v.motion }}</span>{% endif %}
+        {% if v.url %}<a class="pdf" href="{{ v.url }}" target="_blank" rel="noopener">ROLL CALL · PDF →</a>{% endif %}
+      </div>
+      {% if v.groups %}
+      {% for g in v.groups %}
+      <div class="vrow"><div class="k">{{ g.label|upper }} · {{ g.names|length }}</div><div class="v">
+        {{ names.namelist('vote-' ~ vi ~ '-' ~ g.code|lower,
+                          g.label ~ ' · ' ~ v.where ~ ' · ' ~ v.date, g, g.names) }}
+      </div></div>
+      {% endfor %}
+      {% else %}
+      <div class="tally">{{ v.result }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
   </div>
 
   <div class="side">
@@ -180,6 +213,8 @@
     {% endif %}
   </div>
 </div>
+
+{{ names.drawer() }}
 
 <script>
 (function () {

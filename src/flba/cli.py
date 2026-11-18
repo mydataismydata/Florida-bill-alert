@@ -226,6 +226,7 @@ def cmd_bill(args) -> int:
 
 def cmd_docs(args) -> int:
     fetcher, store, _ = _paths(args.session)
+    fetcher.delay = max(fetcher.delay, args.delay)
     db = store.db
     jobs = []
 
@@ -476,6 +477,60 @@ def cmd_crossref(args) -> int:
     return 0
 
 
+_RESULT = re.compile(r"(\d+)\s+Yeas?\s*-\s*(\d+)\s+Nays?", re.I)
+
+
+def cmd_votes(args) -> int:
+    """Read who voted which way from the cached roll-call PDFs (offline).
+
+    `docs --kinds votes` fetches the PDFs. A roll call is stored only when
+    its names add up to the totals the PDF prints and the bill page states.
+    One that does not is reported and left out, and its bill page shows the
+    totals alone.
+    """
+    from .sources import rollcall
+
+    fetcher, store, _ = _paths(args.session)
+    rows = store.db.execute("SELECT num,url,result FROM vote"
+                            " WHERE session=? AND url<>'' ORDER BY num",
+                            (args.session,)).fetchall()
+    jobs = [r for r in rows if fetcher.local_path(r["url"]).exists()]
+    if args.limit:
+        jobs = jobs[:args.limit]
+    print(f"votes: {len(jobs)} roll calls cached "
+          f"({len(rows) - len(jobs)} not yet fetched)")
+    prog, stored, problems = Progress(len(jobs), "votes", every=200), 0, []
+    for r in jobs:
+        try:
+            got = rollcall.parse(fetcher.local_path(r["url"]))
+        except Exception as exc:
+            problems.append((r["num"], r["url"], f"{type(exc).__name__}: {exc}"))
+            prog.tick()
+            continue
+        have, printed = rollcall.counts(got["members"]), got["printed"]
+        stated = _RESULT.search(r["result"] or "")
+        why = ""
+        if not got["members"] or not printed:
+            why = "no names or totals found"
+        elif (have["yeas"], have["nays"]) != (printed["yeas"], printed["nays"]):
+            why = f"names give {have}, the PDF prints {printed}"
+        elif got["layout"] == "floor" and have["not_voting"] != printed["not_voting"]:
+            why = f"names give {have}, the PDF prints {printed}"
+        elif stated and (int(stated.group(1)), int(stated.group(2))) != (
+                printed["yeas"], printed["nays"]):
+            why = f"the PDF prints {printed}, the bill page says {r['result']!r}"
+        if why:
+            problems.append((r["num"], r["url"], why))
+        else:
+            store.save_roll_call(args.session, r["num"], r["url"], got)
+            stored += 1
+        prog.tick()
+    print(f"\nvotes: {stored} roll calls stored, {len(problems)} left out")
+    for num, url, why in problems[:25]:
+        print(f"  {num}: {why}\n      {url}")
+    return 0
+
+
 def cmd_statutes(args) -> int:
     """A bill's statute references, or every bill touching one statute."""
     _, store, _ = _paths(args.session)
@@ -691,6 +746,32 @@ def cmd_members(args) -> int:
         if i % 10 == 0 or i == len(urls):
             print(f"  {i}/{len(urls)}")
     print(f"\nmembers: {saved} stored")
+
+    # Every seat in both chambers, not just the sponsors, so each name on a
+    # roll call or a co-sponsor list can be matched to a person, a party and
+    # a page. Each chamber publishes its roster as one page.
+    from .finance import display_name
+    from .sources.flhouse import ROSTER, parse_roster
+    from .sources.flsenate import parse_senate_roster, roster_url
+
+    # A senator whose own page was read above keeps that page's spelling of
+    # their name, which is what their sponsor page is already called.
+    spelled = {r["district"]: r["name"] for r in store.db.execute(
+        "SELECT district, name FROM member WHERE chamber='Senate'")}
+    for chamber, url, parse in (("Senate", roster_url(), parse_senate_roster),
+                                ("House", ROSTER, parse_roster)):
+        r = fetcher.fetch(url, force=args.refresh)
+        if not r.ok:
+            print(f"  {chamber} roster -> HTTP {r.status}")
+            continue
+        rows = parse(r.text())
+        for row in rows:
+            # The House marks some names with a leading asterisk.
+            row["name"] = row["name"].lstrip("* ").strip()
+            own = spelled.get(row["district"]) if chamber == "Senate" else None
+            row["display"] = display_name(own or row["name"])
+        store.save_legislators(chamber, rows)
+        print(f"  {chamber} roster: {len(rows)} members")
     return 0
 
 
@@ -996,7 +1077,8 @@ def main(argv=None) -> int:
     for name, fn in (("enumerate", cmd_enumerate), ("bills", cmd_bills),
                      ("bill", cmd_bill), ("docs", cmd_docs),
                      ("diff", cmd_diff), ("track", cmd_track),
-                     ("crossref", cmd_crossref), ("statutes", cmd_statutes),
+                     ("crossref", cmd_crossref), ("votes", cmd_votes),
+                     ("statutes", cmd_statutes),
                      ("analyze", cmd_analyze), ("build", cmd_build),
                      ("members", cmd_members), ("reverify", cmd_reverify),
                      ("finance", cmd_finance),
@@ -1029,7 +1111,7 @@ def main(argv=None) -> int:
             sp.add_argument("number", nargs="?", help="bill number")
             sp.add_argument("--statute", help="reverse lookup, e.g. 286.011")
             sp.add_argument("--json", action="store_true")
-        if name == "crossref":
+        if name in ("crossref", "votes"):
             sp.add_argument("--limit", type=int, default=0)
         if name == "finance":
             sp.add_argument("--base-url", default=PACTRACK,
@@ -1090,6 +1172,9 @@ def main(argv=None) -> int:
                             type=lambda v: set(v.split(",")))
             sp.add_argument("--text-pdf", action="store_true",
                             help="also fetch PDF bill text (HTML only by default)")
+            sp.add_argument("--delay", type=float, default=0.0,
+                            help="seconds between requests, if more than the "
+                                 "crawl delay; the vote PDFs need about 3")
 
     args = p.parse_args(argv)
     return args.func(args)

@@ -66,10 +66,55 @@
       outcome = {{ outcome|tojson }}, noun = {{ noun|tojson }},
       capped = true, key = 'n', dir = 1;
 
+  // "nay:Smith" finds the bills Smith voted against. Who voted which way is
+  // several times the size of the bill rows, so it is its own file, fetched
+  // the first time a search asks about votes. "nay:" alone finds every bill
+  // that drew a nay.
+  var VOTE = /^(yeas?|nays?|abstain(?:s|ed)?|voted)\s*:\s*(.*)$/,
+      CODES = {yea: ['Y'], nay: ['N'], abstain: ['AV'], voted: ['Y', 'N', 'AV']},
+      votes = null, voteState = '', who = null;
+
+  function fold(s) {
+    return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+  function voteQuery(t) {
+    var m = VOTE.exec(t);
+    if (!m) return null;
+    var word = {y: 'yea', n: 'nay', a: 'abstain'}[m[1].charAt(0)] || 'voted';
+    return {codes: CODES[word], name: fold(m[2].trim())};
+  }
+  function loadVotes() {
+    if (voteState) return;
+    voteState = 'loading';
+    fetch(ROOT + 'votes-index.json')
+      .then(function (r) { if (!r.ok) throw r; return r.json(); })
+      .then(function (v) { votes = v; voteState = 'ready'; draw(); })
+      .catch(function () { voteState = 'failed'; draw(); });
+  }
+  // Which members a vote search names, by their place in the shared list.
+  function whoIs(name) {
+    var hit = {};
+    (votes.m || []).forEach(function (n, i) {
+      if (!name || n.indexOf(name) >= 0) hit[i] = true;
+    });
+    return hit;
+  }
+  function voted(r, vq) {
+    var b = votes && votes.b[r.n];
+    if (!b) return false;
+    for (var c = 0; c < vq.codes.length; c++) {
+      var ids = b[vq.codes[c]] || [];
+      for (var i = 0; i < ids.length; i++) if (who[ids[i]]) return true;
+    }
+    return false;
+  }
+
   function matches(r) {
     if (outcome !== 'all' && r.o !== outcome) return false;
     var t = q.value.trim().toLowerCase();
     if (!t) return true;
+    var vq = voteQuery(t);
+    if (vq) return voted(r, vq);
     // r.s carries the number as the Legislature writes it, so a reader who
     // pastes "CS/CS/SB 36" still finds the bill the column shows as "SB 36".
     // It carries the filers' names too, which is why they are not repeated
@@ -112,6 +157,9 @@
   }
 
   function draw() {
+    var vq = voteQuery(q.value.trim().toLowerCase());
+    if (vq && !votes) loadVotes();
+    who = (vq && votes) ? whoIs(vq.name) : null;
     var hit = rows.filter(matches).sort(cmp),
         shown = capped ? hit.slice(0, CAP) : hit, html = '';
     for (var i = 0; i < shown.length; i++) {
@@ -122,8 +170,9 @@
               esc(r.d) + '</td></tr>';
     }
     body.innerHTML = html || '<tr><td colspan="4" class="title" style="padding:22px 4px;color:var(--ink3)">No bills match.</td></tr>';
-    if (hint) hint.textContent = 'SHOWING ' + hit.length.toLocaleString() +
-                                 (noun ? ' — ' + noun : '');
+    if (hint) hint.textContent = (vq && voteState === 'loading') ? 'LOADING VOTES…'
+      : (vq && voteState === 'failed') ? 'THE VOTES COULD NOT BE LOADED'
+      : 'SHOWING ' + hit.length.toLocaleString() + (noun ? ' — ' + noun : '');
     if (showall) {
       showall.style.display = (capped && hit.length > CAP) ? '' : 'none';
       showall.firstChild.textContent = 'SHOW ALL ' + hit.length.toLocaleString() + ' →';

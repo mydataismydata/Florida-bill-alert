@@ -206,6 +206,147 @@ def _load_ai(db, session, num):
     return out
 
 
+# A list of names longer than this shows its first two and a count, and the
+# count opens the rest in a slide-out. Three or fewer are shown whole, so the line
+# never reads "+ 1 others".
+NAMES_SHOWN = 2
+NAMES_WHOLE = 3
+
+# How the roll calls group a chamber's members, in the order they are shown.
+VOTE_GROUPS = (("Y", "Yeas"), ("N", "Nays"), ("AV", "Abstained"),
+               ("NV", "Not voting"))
+_DATE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})(?:\s+(\d{1,2}):(\d{2})\s*([AP]M))?")
+
+
+# How a party reads beside a name: "Boyd (R)".
+PARTY_SHORT = {"Republican": "R", "Democrat": "D", "Democratic": "D",
+               "No Party Affiliation": "NPA"}
+
+
+class Roster:
+    """Every seat in both chambers (`flba members`), to put a person behind a
+    name on a roll call or a co-sponsor list.
+
+    The Legislature writes a surname, with an initial where two members share
+    one ("Alvarez, D."), and a floor roll call adds the district. A name that
+    does not lead to exactly one person is left unlinked, because a wrong
+    link reads exactly like a right one.
+    """
+
+    def __init__(self, db):
+        from .finance import roster_index
+        rows = ([dict(r) for r in _rows(db, "SELECT * FROM legislator")]
+                if _has_table(db, "legislator") else [])
+        # The Senate first: a member who moved up from the House is shown
+        # where they sit now.
+        rows.sort(key=lambda r: (r["chamber"] != "Senate", r["district"]))
+        self.rows = rows
+        self.index = {c: roster_index([r for r in rows if r["chamber"] == c])
+                      for c in ("Senate", "House")}
+
+    def find(self, chamber: str, token: str, district: int | None = None):
+        from .finance import fold, match, split_token
+        index = self.index.get(chamber) or {}
+        if district is None:
+            return match(token, index)
+        surname, _ = split_token(token)
+        rows = [r for r in index.get(fold(surname).lower(), [])
+                if r["district"] == district]
+        return rows[0] if len(rows) == 1 else None
+
+    def person(self, chamber: str, token: str, district: int | None = None,
+               **extra) -> dict:
+        """A name as the bill page lists it: the Legislature's own spelling,
+        and the party and page of the member it names, where that is certain."""
+        who = self.find(chamber, token, district)
+        return dict(extra, name=token, district=district,
+                    party=PARTY_SHORT.get((who or {}).get("party"),
+                                          (who or {}).get("party", "")),
+                    slug=member_slug(who["display"]) if who else "")
+
+
+def names_line(names: list) -> dict:
+    """What the truncated line shows of a list, and how many it leaves out."""
+    if len(names) <= NAMES_WHOLE:
+        return {"shown": list(names), "more": 0}
+    return {"shown": list(names[:NAMES_SHOWN]), "more": len(names) - NAMES_SHOWN}
+
+
+def _when(text: str) -> tuple:
+    """A vote's date and time as a sort key, from "2/3/2026 1:00 PM"."""
+    m = _DATE.match(text or "")
+    if not m:
+        return (9999, 0, 0, 0)
+    mo, d, y, h, mi, ap = m.groups()
+    hour = (int(h) % 12 + (12 if ap == "PM" else 0)) if h else 0
+    return (int(y), int(mo), int(d), hour * 60 + int(mi or 0))
+
+
+def _vote_where(committee: str, url: str) -> str:
+    """Where a roll call was taken, from the PDF's own filename."""
+    name = url.rsplit("/", 1)[-1]
+    if name.startswith("HouseVote"):
+        return "House floor"
+    if name.startswith("SenateVote"):
+        return "Senate floor"
+    chamber = "Senate" if "Vote Record" in name else ""
+    return " ".join(filter(None, [chamber, "committee"])) + (
+        f" · {committee}" if committee else "")
+
+
+def _member_note(m: dict, layout_floor: bool) -> str:
+    if m["after"] and layout_floor:
+        return f"voted {'yea' if m['after'] == 'Y' else 'nay'} after the roll call"
+    if m["after"]:
+        return "voted after the roll call"
+    if m["excused"]:
+        return "excused"
+    return ""
+
+
+def load_votes(db, session: str, roster: Roster) -> dict[int, list]:
+    """Every bill's roll calls, most recent first, with each member's vote.
+
+    The names are there for a roll call `flba votes` has read. One it has not
+    -- not fetched yet, or its names did not add up -- shows the totals the
+    bill page states and a link to the PDF.
+    """
+    if not _has_table(db, "roll_call"):
+        return {}
+    info = {r["url"]: dict(r) for r in
+            _rows(db, "SELECT * FROM roll_call_info WHERE session=?", session)}
+    members: dict[str, list] = {}
+    for r in _rows(db, "SELECT url,name,district,code,excused,after,position"
+                       "  FROM roll_call WHERE session=? ORDER BY url,seq",
+                   session):
+        members.setdefault(r["url"], []).append(dict(r))
+    out: dict[int, list] = {}
+    for v in _rows(db, "SELECT * FROM vote WHERE session=?", session):
+        url = v["url"] or ""
+        where = _vote_where(v["committee"] or "", url)
+        floor = where.endswith("floor")
+        meta = info.get(url) or {}
+        chamber = where.split(" ")[0]
+        groups = []
+        for code, label in VOTE_GROUPS:
+            who = [roster.person(chamber, m["name"],
+                                 m["district"] if floor else None,
+                                 position=m["position"] or "",
+                                 note=_member_note(m, floor))
+                   for m in members.get(url, []) if m["code"] == code]
+            if who:
+                groups.append({"code": code, "label": label, "names": who,
+                               **names_line(who)})
+        out.setdefault(v["num"], []).append({
+            "where": where, "date": (v["date"] or "").split(" ")[0],
+            "sort": _when(v["date"]), "motion": meta.get("motion") or "",
+            "result": v["result"] or "", "url": url, "groups": groups,
+            "chamber": chamber, "members": members.get(url, [])})
+    for events in out.values():
+        events.sort(key=lambda e: e["sort"], reverse=True)
+    return out
+
+
 def _load_render(db, session, num):
     row = db.execute("SELECT version,fmt,segments FROM bill_render"
                      " WHERE session=? AND num=?", (session, num)).fetchone()
@@ -291,6 +432,18 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     for r in _rows(db, "SELECT num,date,chamber,action FROM history"
                        " WHERE session=? ORDER BY num,seq", session):
         history.setdefault(r["num"], []).append(dict(r))
+
+    # Who voted which way on each bill, where the roll calls have been read,
+    # each name matched to a member, their party and their page.
+    roster = Roster(db)
+    votes = load_votes(db, session, roster)
+    # The same, inverted for the search box: for each bill, which members
+    # voted yea, nay or abstained, by their place in one shared list of
+    # names. It is a file of its own because it is several times the size
+    # of the bill rows, and only a search that asks about votes needs it.
+    from .finance import fold
+    voter_ids: dict[str, int] = {}
+    vote_index: dict[str, dict] = {}
 
     common = dict(site_name=SITE_NAME, session=session, built=built,
                   repo=REPO, bill_count=len(bills), local=local,
@@ -382,8 +535,22 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         # build writes one bill, and a link out of it would land nowhere.
         companion_href = (prog.companion_num
                           if prog.companion_num in built_nums else None)
+        cosponsors = [roster.person(b["chamber"], c.strip())
+                      for c in (b["cosponsors"] or "").split(";") if c.strip()]
+        bill_votes = votes.get(b["num"], [])
+        cast: dict[str, set] = {}
+        for e in bill_votes:
+            for m in e["members"]:
+                if m["code"] in ("Y", "N", "AV"):
+                    key = fold(m["name"]).lower()
+                    cast.setdefault(m["code"], set()).add(
+                        voter_ids.setdefault(key, len(voter_ids)))
+        if cast:
+            vote_index[str(b["num"])] = {k: sorted(v) for k, v in cast.items()}
         html = env.get_template("bill.html").render(
             root="../", b=b, p=prog, path=pathway(prog), refs=refs,
+            cosponsors=cosponsors, cosponsors_line=names_line(cosponsors),
+            votes=bill_votes,
             companion_href=companion_href,
             members=members, sponsor_has_committees=bool(_panels),
             filed_by=filed_by,
@@ -439,6 +606,9 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
 
     (out / "search-index.json").write_text(
         json.dumps(index_rows, separators=(",", ":")), encoding="utf-8")
+    (out / "votes-index.json").write_text(
+        json.dumps({"m": list(voter_ids), "b": vote_index},
+                   separators=(",", ":")), encoding="utf-8")
 
     # ------------------------------------------------------ statute pages
     stat_rows = []
@@ -517,33 +687,47 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                 **common), encoding="utf-8")
 
     # ----------------------------------------------------------- members
-    # One page per person who filed something, so the name on a bill leads to
-    # the rest of their record rather than off the site.
+    # One page per member, so a name on a bill -- sponsor, co-sponsor or
+    # voter -- leads to the rest of their record rather than off the site.
+    # The page lists the bills they filed, and a member who filed none still
+    # has one.
     (out / "member").mkdir(parents=True, exist_ok=True)
-    seen_slugs: dict[str, tuple] = {}
+    pages: dict[str, dict] = {}
     for (chamber, token, name), rows in sorted(by_member.items()):
         who = sponsors.get((chamber, token)) or {}
         stub = member_slug(name)
         if not stub:
             continue
-        if stub in seen_slugs:
+        if stub in pages:
             # Two people cannot share a page. Nothing in the 2026 rosters
             # collides, and if a session ever does this says so instead of
             # quietly publishing one member's bills under another's name.
             raise SystemExit(f"two members share the URL {stub}: "
-                             f"{seen_slugs[stub]} and {(chamber, token)}")
-        seen_slugs[stub] = (chamber, token)
-        rows = sorted(rows, key=lambda r: r["n"])
+                             f"{pages[stub]['key']} and {(chamber, token)}")
+        pages[stub] = dict(key=(chamber, token), name=name, chamber=chamber,
+                           district=who.get("district"),
+                           party=who.get("party", ""),
+                           official=who.get("member_url", ""),
+                           donations=who.get("url", ""), rows=rows)
+    for leg in roster.rows:
+        stub = member_slug(leg["display"])
+        # Already there: they filed bills, or they sat in the other chamber
+        # first and the roster lists them twice under one name.
+        if stub and stub not in pages:
+            pages[stub] = dict(key=(leg["chamber"], leg["url"]),
+                               name=leg["display"], chamber=leg["chamber"],
+                               district=leg["district"], party=leg["party"],
+                               official=leg["url"], donations="", rows=[])
+    for stub, page in sorted(pages.items()):
+        rows = sorted(page.pop("rows"), key=lambda r: r["n"])
+        page.pop("key")
         counts: dict = {}
         for r in rows:
             counts[r["o"]] = counts.get(r["o"], 0) + 1
         (out / "member" / f"{stub}.html").write_text(
             env.get_template("member.html").render(
-                root="../", name=name, chamber=chamber,
-                district=who.get("district"), party=who.get("party", ""),
-                official=who.get("member_url", ""), donations=who.get("url", ""),
-                rows=rows, outcomes=_outcome_cards(counts),
-                enacted=counts.get("became_law", 0),
+                root="../", rows=rows, outcomes=_outcome_cards(counts),
+                enacted=counts.get("became_law", 0), **page,
                 **common), encoding="utf-8")
 
     # --------------------------------------------------------- calendar

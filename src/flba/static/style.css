@@ -375,6 +375,61 @@ footer.site a { color: var(--acc2); }
 .side .more a, a.moreline { font: 500 10.5px var(--mono); letter-spacing: .1em;
   color: var(--acc); display: inline-block; margin: 14px 0 0; }
 
+/* A long list of members: two names, and a count that opens the rest in a
+   slide-out. */
+.names button.others { background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; color: var(--acc); text-decoration: underline;
+  text-decoration-style: dotted; text-underline-offset: 3px; }
+.names button.others:hover, .names button.others:focus-visible {
+  text-decoration-style: solid; }
+.names .note { font-size: 13px; color: var(--ink3); }
+.names a, .drawer-body a { color: var(--acc); }
+
+.drawer-back { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .45);
+  opacity: 0; transition: opacity .2s ease-out; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 61;
+  width: min(460px, 92vw); display: flex; flex-direction: column;
+  background: var(--bg1); border-left: 1px solid var(--ru);
+  box-shadow: -10px 0 30px rgba(0, 0, 0, .28);
+  transform: translateX(100%); transition: transform .22s ease-out; }
+.drawer[hidden], .drawer-back[hidden] { display: none; }
+.drawer.open { transform: none; }
+.drawer-back.open { opacity: 1; }
+body.drawer-on { overflow: hidden; }
+.drawer > header { display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 12px; padding: 20px 22px 14px; border-bottom: 3px double var(--ru); }
+.drawer h2 { margin: 0; font: 500 11px/1.6 var(--mono); letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink2); }
+.drawer .x { background: none; border: none; cursor: pointer; padding: 0 4px;
+  font: 400 24px/1 var(--mono); color: var(--ink3); }
+.drawer .x:hover, .drawer .x:focus-visible { color: var(--acc); }
+.drawer-body { overflow-y: auto; padding: 12px 22px 30px; }
+.drawer-body .count { margin: 0 0 8px; font: 400 11px var(--mono); letter-spacing: .1em;
+  color: var(--ink3); }
+.drawer-body ol { margin: 0; padding: 0; list-style: none; columns: 2; column-gap: 26px; }
+.drawer-body li { break-inside: avoid; padding: 5px 0; border-bottom: 1px solid var(--ru2);
+  font-size: 14.5px; line-height: 1.4; }
+.drawer-body .dist { margin-left: 4px; font: 400 10.5px var(--mono); color: var(--ink3); }
+.drawer-body .note { display: block; font-size: 12.5px; font-style: italic;
+  color: var(--ink2); }
+@media (max-width: 520px) { .drawer-body ol { columns: 1; } }
+@media (prefers-reduced-motion: reduce) { .drawer, .drawer-back { transition: none; } }
+
+/* roll calls */
+.vote { margin: 18px 0 0; padding-bottom: 16px; border-bottom: 1px solid var(--ru2); }
+.vote:last-of-type { border-bottom: none; }
+.vote .vhead { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.vote .where { font-size: 16px; font-weight: 700; }
+.vote .when, .vote .motion { font: 400 11.5px var(--mono); color: var(--ink3); }
+.vote .pdf { margin-left: auto; font: 500 10.5px var(--mono); letter-spacing: .1em;
+  color: var(--acc); }
+.vote .tally { margin: 6px 0 0; font: 400 12.5px var(--mono); color: var(--ink2); }
+.vote .vrow { display: grid; grid-template-columns: 140px 1fr; gap: 10px; padding: 7px 0 0; }
+.vote .vrow .k { font: 500 10px var(--mono); letter-spacing: .14em; color: var(--ink3);
+  padding-top: 3px; }
+.vote .vrow .v { font-size: 14.5px; color: var(--ink2); }
+@media (max-width: 600px) { .vote .vrow { grid-template-columns: 1fr; gap: 2px; } }
+
 @media (max-width: 1000px) {
   .billbody { grid-template-columns: 1fr; gap: 30px; }
   .billhead h1 { font-size: 27px; }
@@ -513,6 +568,12 @@ input[type="radio"]:focus-visible + .radio { outline: 2px solid var(--acc); }
   .billbody { grid-template-columns: 1fr; }
   a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 9px; }
   .quote, .aibox, .factledger { break-inside: avoid; }
+  /* Paper gets every name, not two and a button. */
+  .names.has-full, .drawer, .drawer-back { display: none !important; }
+  .names-full[hidden] { display: block !important; }
+  .names-full .count { display: none; }
+  .names-full ol { margin: 0; padding: 0; list-style: none; columns: 3;
+    font-size: 11px; line-height: 1.5; }
 }
 
 /* ========================================================= the bill itself

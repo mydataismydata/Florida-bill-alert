@@ -115,8 +115,16 @@ touching the pipeline. Cloud API access is just another profile.
 
 ```bash
 $P -m flba --session 2026 crossref     # index statutes + changes (offline)
+$P -m flba --session 2026 docs --kinds votes --delay 3   # roll-call PDFs
+$P -m flba --session 2026 votes        # who voted which way (offline)
 $P -m flba --session 2026 build        # render the static site
 ```
+
+The roll-call PDFs need the slower pace. At one request a second the Senate
+site answered "too many requests" after about 35 of them. At one every three
+seconds the session's 1,707 take about an hour and a half the first time, and
+only new ones after that. `votes` stores a roll call only when its names add
+up to the totals the PDF prints, and lists any it leaves out.
 
 Output lands in `site/`.
 
@@ -251,6 +259,13 @@ off each. The district is already in the URL the bill page carries.
 every Senate bill. House sponsors appear on the same site as a bare surname
 with no link and nothing behind it, so a House bill names its member and stops
 there. The House's own roster fills that gap -- see Campaign finance below.
+
+It also stores each chamber's whole roster, one page each: every senator from
+the Senate's list, and every representative from the House's own. Those
+match the names on co-sponsor lists and roll calls to a person, so each name
+links to that member's page and a vote shows their party, "Boyd (R)". Every
+member on a roster gets a page, including one who filed nothing. Run it
+before `build`.
 
 Re-run the command when the chamber changes -- membership, party or district.
 It is cheap and the raw pages are cached.

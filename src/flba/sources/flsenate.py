@@ -346,3 +346,34 @@ def parse_senator_page(html: str, url: str) -> dict:
             rec["name"] = _NICKNAME.sub(" ", full).strip()
             break
     return rec
+
+
+def roster_url() -> str:
+    return f"{BASE}/Senators"
+
+
+def parse_senate_roster(html: str) -> list[dict]:
+    """Every senator in the chamber's own list: name, district, party, title.
+
+    One table row per seat. The name links to the member's page, and a
+    leader carries a title under it ("President", "President Pro Tempore").
+    A link in the same list that is not a seat's own page -- a former
+    member's, under /S11/5410 -- sits outside the table and is skipped.
+    """
+    soup = BeautifulSoup(html, "lxml")
+    out = []
+    for a in soup.select("a.senatorLink[href]"):
+        row = a.find_parent("tr")
+        if row is None:
+            continue
+        cells = [_txt(td) for td in row.find_all("td")]
+        # The list links to the term's page, "/Senators/2024-2026/S27".
+        seat = re.search(r"/S(\d+)$", a["href"])
+        if not seat or len(cells) < 2 or cells[0] != seat.group(1):
+            continue
+        district = int(seat.group(1))
+        title = row.find("strong")
+        out.append({"name": _txt(a), "district": district,
+                    "party": cells[1], "url": senator_url(district),
+                    "title": _txt(title) if title else ""})
+    return out

@@ -25,7 +25,7 @@
     <div class="count" id="hint">SHOWING {{ '{:,}'.format(enacted|length) }} — {{ default_noun }}</div>
   </div>
   <div class="controls">
-    <input type="search" id="q" placeholder="Search by number, title, or sponsor" autocomplete="off">
+    <input type="search" id="q" placeholder="Search by number, title, sponsor, or vote (nay:Smith)" autocomplete="off">
     {{ ledger.filters(outcomes, default_outcome, 'all bills') }}
   </div>
 
