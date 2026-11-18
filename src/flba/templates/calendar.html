@@ -17,7 +17,7 @@
 <section class="pagehead">
   <div class="row">
     <div>
-      <div style="font:400 10px var(--mono);letter-spacing:.3em;color:var(--ink3)">{{ years|map(attribute='year')|join(' · ') }} LEGISLATIVE YEAR{{ 'S' if years|length > 1 }}</div>
+      <div style="font:400 10px var(--mono);letter-spacing:.3em;color:var(--ink3)">{{ cal_years|map(attribute='year')|join(' · ') }} LEGISLATIVE YEAR{{ 'S' if cal_years|length > 1 }}</div>
       <h1>Session calendar</h1>
     </div>
     <div style="margin-top:18px"><span class="stamp">{{ phase_label }} · {{ today }}</span></div>
@@ -26,7 +26,7 @@
 
 <div class="twocol">
   <div>
-    {% for y in years %}
+    {% for y in cal_years %}
     <div class="slabel"{% if not loop.first %} style="margin-top:48px"{% endif %}>{{ y.year }} REGULAR SESSION — {{ y.status }}</div>
     <div>
       {% for e in y.events %}

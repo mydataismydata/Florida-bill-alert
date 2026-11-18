@@ -22,7 +22,7 @@
   <p class="meta" style="font:400 11px var(--mono);letter-spacing:.08em;color:var(--ink3);margin:14px 0 0">
     VERSION {{ version }}{% if fmt == 'house-pdf' %} · RENDERED FROM THE OFFICIAL PDF,
     WHICH THE LEGISLATURE PUBLISHES IN NO OTHER FORMAT{% endif %} ·
-    <a href="{{ root }}bills/{{ b.num }}.html" style="color:var(--acc2)">BACK TO THE SUMMARY</a> ·
+    <a href="{{ root }}{{ bdir }}/{{ b.num }}.html" style="color:var(--acc2)">BACK TO THE SUMMARY</a> ·
     <a href="{{ b.url }}" target="_blank" rel="noopener" style="color:var(--acc2)">OFFICIAL RECORD</a></p>
 </section>
 

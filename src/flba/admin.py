@@ -18,6 +18,8 @@ import json
 import time
 from html import escape
 
+from .site import bill_dir
+
 MAX_PARAGRAPHS = 4
 
 
@@ -166,12 +168,12 @@ def form_html(session: str, num: int, bill: dict, values: dict, token: str,
 <link rel="stylesheet" href="/style.css">
 <style>{_STYLE}</style></head>
 <body><main class="edit">
-<p><a href="/bills/{num}.html">← Back to the bill</a></p>
+<p><a href="/{bill_dir(session)}/{num}.html">← Back to the bill</a></p>
 <h1>Edit {label}</h1>
 <p>Saving rewrites this bill's page on this machine. Push the site to publish
 it. Re-running the analysis replaces these edits.</p>
 {err}
-<form method="post" action="/_edit/{num}">
+<form method="post" action="/_edit/{e(session)}/{num}">
 <input type="hidden" name="token" value="{e(token)}">
 <input type="hidden" name="stamp" value="{e(values['stamp'])}">
 <label for="one_line">Headline</label>

@@ -162,6 +162,17 @@ input:focus, select:focus { border-color: var(--acc); }
   border: 1px solid var(--ru); padding: 7px 14px; font: 500 10.5px var(--mono);
   letter-spacing: .14em; color: var(--ink2); background: none; cursor: pointer; }
 .picker:hover { border-color: var(--acc); color: var(--acc); }
+/* The session picker: a native select dressed as the label around it. */
+.picker select, .yearpick select { font: inherit; letter-spacing: inherit;
+  color: inherit; background: none; border: 0; padding: 0 2px; cursor: pointer; }
+.picker select:focus-visible, .yearpick select:focus-visible {
+  outline: 2px solid var(--acc); outline-offset: 2px; }
+.picker option, .yearpick option { color: var(--ink); background: var(--bg0); }
+.yearpick { display: inline-flex; align-items: center; gap: 8px; flex: none;
+  border: 1px solid var(--ru); padding: 7px 12px; font: 500 10.5px var(--mono);
+  letter-spacing: .14em; color: var(--ink2); }
+.yearpick:hover, .yearpick:focus-within { border-color: var(--acc); color: var(--acc); }
+.picker[hidden], .yearpick[hidden] { display: none; }
 
 /* ------------------------------------------------------------ stats band */
 .stats { display: grid; grid-template-columns: repeat(7, 1fr);
@@ -192,6 +203,8 @@ input:focus, select:focus { border-color: var(--acc); }
   padding-bottom: 2px; }
 
 table.ledger { width: 100%; border-collapse: collapse; margin: 18px 0 0; }
+table.ledger th.yr, table.ledger td.yr { width: 64px; }
+table.ledger td.yr { font: 500 13px var(--mono); color: var(--ink3); }
 table.ledger thead th { text-align: left; padding: 9px 4px;
   border-bottom: 2px solid var(--ru); font: 500 10px var(--mono);
   letter-spacing: .14em; color: var(--ink3); font-weight: 500; }

@@ -16,7 +16,7 @@
     <button type="button" class="theme-toggle" data-theme-toggle>DARK MODE</button>
   </nav>
 </header>
-{% if local %}{{ repull(b.num) }}{% endif %}
+{% if local %}{{ repull(b.num, session) }}{% endif %}
 {% endblock %}
 
 {% block body %}
@@ -45,7 +45,7 @@
       {% for m in filed_by %}
       <div class="filer">
         {%- if m.slug %}<a href="{{ root }}member/{{ m.slug }}.html"
-          title="Everything {{ m.member_name }} filed this session">{{ m.member_name }}</a>
+          title="Everything {{ m.member_name }} has filed">{{ m.member_name }}</a>
         {%- else %}{{ m.member_name or m.token }}{% endif %}
         {%- if m.district %} — District {{ m.district }}, {{ m.party }}{% endif %}
         {%- if m.donations %} <span class="donations">[
@@ -66,7 +66,7 @@
     {% if p.companion %}<div class="row"><div class="k">COMPANION</div><div class="v">{#
     Naming this bill rather than saying "this bill" -- the sentence opens with
     the companion's number, so "this bill was set aside" read as though the
-    companion was the one that died. #}{% if companion_href %}<a href="{{ root }}bills/{{ companion_href }}.html">{{ p.companion }}</a>{% else %}{{ p.companion }}{% endif %} — {{ b.label }} was set aside and its companion carried the policy</div></div>{% endif %}
+    companion was the one that died. #}{% if companion_href %}<a href="{{ root }}{{ bdir }}/{{ companion_href }}.html">{{ p.companion }}</a>{% else %}{{ p.companion }}{% endif %} — {{ b.label }} was set aside and its companion carried the policy</div></div>{% endif %}
     {% if p.died_in %}<div class="row"><div class="k">DIED IN</div><div class="v">{{ p.died_in }}</div></div>{% endif %}
     <div class="row"><div class="k">OFFICIAL RECORD</div><div class="v">
       <a href="{{ b.url }}" target="_blank" rel="noopener">{{ b.url|replace('https://www.','') }}</a></div></div>
@@ -89,7 +89,7 @@
     {# Part of the summary block, not a section of its own: the Legislature's
        description of the bill, then the bill. #}
     {% if has_text %}
-    <p class="billtext"><a href="{{ root }}bills/{{ b.num }}-text.html">Full bill text →</a></p>
+    <p class="billtext"><a href="{{ root }}{{ bdir }}/{{ b.num }}-text.html">Full bill text →</a></p>
     {% endif %}
 
     <section class="aibox">
@@ -137,7 +137,7 @@
       <p class="desc"><span class="aitag">AI</span>{{ pr.effect }}</p>
       {% if pr.quote %}
       <div class="quote">“{{ pr.quote }}”
-        {%- if pr.line %} <a href="{{ root }}bills/{{ b.num }}-text.html#L{{ pr.line }}">bill text, line {{ pr.line }} →</a>{% endif %}
+        {%- if pr.line %} <a href="{{ root }}{{ bdir }}/{{ b.num }}-text.html#L{{ pr.line }}">bill text, line {{ pr.line }} →</a>{% endif %}
       </div>
       {% endif %}
     </div>

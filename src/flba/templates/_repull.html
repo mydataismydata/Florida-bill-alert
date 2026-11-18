@@ -15,12 +15,12 @@
   Without JavaScript the form still posts, and the server sends the browser
   back to the bill.
 #}
-{% macro repull(num) %}
+{% macro repull(num, session) %}
 <div class="adminbar noprint">
-  <form method="post" action="/_reanalyze/{{ num }}" data-rerun>
+  <form method="post" action="/_reanalyze/{{ session }}/{{ num }}" data-rerun>
     <button type="submit" class="btn">Re-run AI analysis</button>
   </form>
-  <a class="btn ghost" href="/_edit/{{ num }}">Manually edit</a>
+  <a class="btn ghost" href="/_edit/{{ session }}/{{ num }}">Manually edit</a>
   <span class="adminbar-status" aria-live="polite"></span>
 </div>
 <script>

@@ -18,6 +18,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from .areas import classify, slug
+from .site import bill_dir
 
 
 def _rows(db, sql, *args):
@@ -63,6 +64,9 @@ def payload(db, session: str, product: str, nums: list[int],
                         (session, num)).fetchone()
         bills.append({
             "num": b["num"],
+            # Where its page is, from the site root. Bill numbers start again
+            # each session, so the number alone no longer finds the page.
+            "path": f"{bill_dir(session)}/{b['num']}.html",
             "label": b["label"],
             "title": b["title"] or "",
             "area": area or "General",

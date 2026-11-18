@@ -740,7 +740,7 @@ def cmd_members(args) -> int:
         if rec["district"] is None or not rec["party"]:
             print(f"  {url} -> could not read district/party")
             continue
-        store.save_member("Senate", rec["district"], rec["name"],
+        store.save_member(args.session, "Senate", rec["district"], rec["name"],
                           rec["party"], url, rec.get("nickname", ""))
         saved += 1
         if i % 10 == 0 or i == len(urls):
@@ -757,7 +757,8 @@ def cmd_members(args) -> int:
     # A senator whose own page was read above keeps that page's spelling of
     # their name, which is what their sponsor page is already called.
     spelled = {r["district"]: r["name"] for r in store.db.execute(
-        "SELECT district, name FROM member WHERE chamber='Senate'")}
+        "SELECT district, name FROM member WHERE session=? AND chamber='Senate'",
+        (args.session,))}
     for chamber, url, parse in (("Senate", roster_url(), parse_senate_roster),
                                 ("House", ROSTER, parse_roster)):
         r = fetcher.fetch(url, force=args.refresh)
@@ -770,7 +771,7 @@ def cmd_members(args) -> int:
             row["name"] = row["name"].lstrip("* ").strip()
             own = spelled.get(row["district"]) if chamber == "Senate" else None
             row["display"] = display_name(own or row["name"])
-        store.save_legislators(chamber, rows)
+        store.save_legislators(args.session, chamber, rows)
         print(f"  {chamber} roster: {len(rows)} members")
     return 0
 
@@ -783,22 +784,21 @@ def cmd_finance(args) -> int:
     """
     from .finance import (Tracker, display_name, match, roster_index,
                           sponsor_names)
-    from .sources.flhouse import ROSTER, parse_roster
 
     store = Store(DATA / "index.sqlite")
-    fetcher = PoliteFetcher(DATA / "raw")
     tracker = Tracker(base=args.base_url, public=args.public_url)
 
-    r = fetcher.fetch(ROSTER, force=args.refresh)
-    if not r.ok:
-        print(f"house roster -> HTTP {r.status}")
-        return 1
-    house = parse_roster(r.text())
+    # Both rosters as `flba members` stored them for this session. Fetching
+    # the House's here would give whoever sits today, which for an earlier
+    # session is the wrong House.
+    house = [dict(row) for row in store.db.execute(
+        "SELECT name,district,party,url FROM legislator"
+        " WHERE session=? AND chamber='House'", (args.session,))]
     senators = {row["url"]: dict(row) for row in store.db.execute(
         "SELECT name,district,party,url,nickname FROM member"
-        " WHERE chamber='Senate'")}
-    if not senators:
-        print("no senators stored -- run: flba members")
+        " WHERE session=? AND chamber='Senate'", (args.session,))}
+    if not senators or not house:
+        print(f"no rosters stored for {args.session} -- run: flba members")
         return 1
     print(f"rosters: {len(house)} House, {len(senators)} Senate")
 
@@ -883,7 +883,7 @@ def cmd_build(args) -> int:
         print(f"\n  rebuilt bill {args.only} only "
               f"(front page counts unchanged until a full build)")
         return 0
-    print(f"\n  {stats['bills']} bill pages")
+    print(f"\n  {stats['bill_pages']} bill pages")
     print(f"  {stats['statutes']} statute pages")
     print(f"  {stats['files']} files, {stats['bytes']/1e6:.1f} MB total")
     if args.local:

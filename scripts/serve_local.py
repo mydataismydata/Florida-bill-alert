@@ -47,12 +47,14 @@ DB = ROOT / "data" / "index.sqlite"
 sys.path.insert(0, str(ROOT / "src"))
 
 from flba import admin            # noqa: E402
+from flba.site import bill_dir    # noqa: E402
 from flba.store import Store      # noqa: E402
 
-# The bill number is the only thing a request controls, and it reaches a
-# subprocess, so it is matched rather than escaped.
-RE_ANALYZE = re.compile(r"^/_reanalyze/(\d{1,6})$")
-RE_EDIT = re.compile(r"^/_edit/(\d{1,6})$")
+# The session and bill number are the only things a request controls, and
+# they reach a subprocess, so they are matched rather than escaped. Bill
+# numbers start again each session, so the session is part of the address.
+RE_ANALYZE = re.compile(r"^/_reanalyze/(\d{4}[A-Z]?)/(\d{1,6})$")
+RE_EDIT = re.compile(r"^/_edit/(\d{4}[A-Z]?)/(\d{1,6})$")
 
 # Minted per run. The edit form carries it, and a save without it is refused.
 TOKEN = secrets.token_urlsafe(24)
@@ -62,7 +64,7 @@ MAX_FORM = 200_000
 # should be free to read another bill meanwhile, so the POST only queues the
 # job and answers at once. The job runs on in this process whether or not
 # anyone is still watching: it stores the analysis and rebuilds the page.
-# The bill page asks GET /_reanalyze/<num> how the job is doing.
+# The bill page asks GET /_reanalyze/<session>/<num> how the job is doing.
 #
 # GLM takes one bill at a time, so jobs started together wait their turn.
 # Jobs live in memory: restarting this server forgets them, and a job still
@@ -187,15 +189,30 @@ class Handler(SimpleHTTPRequestHandler):
     session = "2026"
     model: str | None = None
 
+    def _ours(self, m) -> int | None:
+        """The bill number, if the request is for this server's session.
+
+        One server runs one session, and its jobs and locks are keyed by
+        number alone. A button on another session's page is refused rather
+        than run against this session's bill of the same number."""
+        if m.group(1) != self.session:
+            self.send_error(409, f"this server runs session {self.session}; "
+                                 f"start it with --session {m.group(1)}")
+            return None
+        return int(m.group(2))
+
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         m = RE_ANALYZE.match(path)
         if m:
-            return self._reply(200, job_state(int(m.group(1))))
+            num = self._ours(m)
+            return None if num is None else self._reply(200, job_state(num))
         m = RE_EDIT.match(path)
         if not m:
             return super().do_GET()
-        num = int(m.group(1))
+        num = self._ours(m)
+        if num is None:
+            return None
         store = Store(DB)
         try:
             bill, rec = admin.load(store.db, self.session, num)
@@ -210,11 +227,14 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         m = RE_EDIT.match(self.path)
         if m:
-            return self._edit(int(m.group(1)))
+            num = self._ours(m)
+            return None if num is None else self._edit(num)
         m = RE_ANALYZE.match(self.path)
         if not m:
             return self.send_error(404, "no such endpoint")
-        num = int(m.group(1))
+        num = self._ours(m)
+        if num is None:
+            return None
         if not known_bill(self.session, num):
             return self._reply(404, {"error": f"bill {num} is not in the index"})
         job = start_job(num, self.session, self.model)
@@ -222,7 +242,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._reply(202, job)
         # Without JavaScript: back to the bill, which shows the job running.
         self.send_response(303)
-        self.send_header("Location", f"/bills/{num}.html")
+        self.send_header("Location", f"/{bill_dir(self.session)}/{num}.html")
         self.end_headers()
 
     def _edit(self, num: int):
@@ -254,7 +274,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._page(500, f"<p>Saved, but the page rebuild failed: "
                                    f"{admin.escape(detail)}</p>")
         self.send_response(303)
-        self.send_header("Location", f"/bills/{num}.html")
+        self.send_header("Location", f"/{bill_dir(self.session)}/{num}.html")
         self.end_headers()
 
     def _page(self, code: int, html: str):
@@ -300,8 +320,8 @@ def main() -> int:
     with ThreadingHTTPServer(("127.0.0.1", a.port), handler) as httpd:
         print(f"serving {SITE} at http://127.0.0.1:{a.port}  (loopback only)",
               flush=True)
-        print("re-run buttons post to /_reanalyze/<num>, edits to "
-              "/_edit/<num>.  ctrl-c to stop.", flush=True)
+        print("re-run buttons post to /_reanalyze/<session>/<num>, edits to "
+              "/_edit/<session>/<num>.  ctrl-c to stop.", flush=True)
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

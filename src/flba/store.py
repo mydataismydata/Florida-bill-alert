@@ -5,6 +5,7 @@ index -- it can always be rebuilt by reparsing the cache, offline.
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
@@ -102,14 +103,17 @@ CREATE TABLE IF NOT EXISTS change (
     PRIMARY KEY (session, num, version, seq)
 );
 
+-- Kept per session: an election changes who holds a seat, and the earlier
+-- session's bills must still name the member who held it then.
 CREATE TABLE IF NOT EXISTS member (
+    session TEXT NOT NULL DEFAULT '',
     chamber TEXT, district INTEGER, name TEXT, party TEXT, url TEXT,
     -- What they are called, where the chamber publishes it. Kept apart from
     -- `name` because pages should read "Thomas J. Leek" while a search of the
     -- campaign filings has to know to also try "Tom".
     nickname TEXT DEFAULT '',
     fetched_at TEXT DEFAULT (datetime('now')),
-    PRIMARY KEY (chamber, district)
+    PRIMARY KEY (session, chamber, district)
 );
 
 -- One row per sponsor name as the Legislature writes it, so the site can
@@ -163,13 +167,15 @@ CREATE TABLE IF NOT EXISTS roll_call (
 -- roll call or a co-sponsor list can be matched to a person, a party and a
 -- page. `member` holds only the senators who sponsored something. The House
 -- roster keeps a member who left mid-term beside the one who replaced them,
--- so the key is the member's own page, not the district.
+-- so the key is the member's own page, not the district. Kept per session,
+-- like `member`.
 CREATE TABLE IF NOT EXISTS legislator (
+    session TEXT NOT NULL DEFAULT '',
     chamber TEXT, url TEXT,
     name TEXT,          -- as the roster writes it: 'Leek, Thomas J. "Tom"'
     display TEXT,       -- as the site shows it, and as its page is named
     district INTEGER, party TEXT,
-    PRIMARY KEY (chamber, url)
+    PRIMARY KEY (session, chamber, url)
 );
 
 -- What each roll call was on ("Passage · Third Reading", "Favorable") and
@@ -205,6 +211,7 @@ class Store:
         self.db.execute("PRAGMA busy_timeout=30000")
         self.db.executescript(SCHEMA)
         self._add_missing_columns()
+        self._rosters_by_session()
 
     # CREATE TABLE IF NOT EXISTS leaves an existing table alone, so a column
     # added later never reaches a database that predates it.
@@ -221,6 +228,34 @@ class Store:
                 self.db.execute(
                     f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
         self.db.commit()
+
+    def _rosters_by_session(self) -> None:
+        """Rebuild `member` and `legislator` with the session in their key.
+
+        Both were once keyed without it, so a later session's roster would
+        have written over an earlier one's. A new column cannot join a
+        primary key, so each table is copied into the new shape. The rows
+        already there are given the database's earliest session, which is
+        the one they were read for.
+        """
+        for table in ("member", "legislator"):
+            cols = [r["name"] for r in
+                    self.db.execute(f"PRAGMA table_info({table})")]
+            if not cols or "session" in cols:
+                continue
+            ddl = re.search(rf"CREATE TABLE IF NOT EXISTS {table} \(.*?\n\);",
+                            SCHEMA, re.S).group(0)
+            first = (self.db.execute("SELECT MIN(session) FROM bill")
+                     .fetchone()[0] or "")
+            listed = ", ".join(cols)
+            self.db.execute("BEGIN IMMEDIATE")
+            self.db.execute(f"ALTER TABLE {table} RENAME TO {table}_unsessioned")
+            self.db.execute(ddl)
+            self.db.execute(
+                f"INSERT INTO {table} (session, {listed})"
+                f" SELECT ?, {listed} FROM {table}_unsessioned", (first,))
+            self.db.execute(f"DROP TABLE {table}_unsessioned")
+            self.db.execute("COMMIT")
 
     def log_fetch(self, r) -> None:
         self.db.execute(
@@ -304,14 +339,18 @@ class Store:
                  int(bool(m["excused"])), m["after"], m.get("position", "")))
         self.db.execute("COMMIT")
 
-    def save_legislators(self, chamber: str, rows: list[dict]) -> None:
+    def save_legislators(self, session: str, chamber: str,
+                         rows: list[dict]) -> None:
         self.db.execute("BEGIN IMMEDIATE")
-        self.db.execute("DELETE FROM legislator WHERE chamber=?", (chamber,))
+        self.db.execute("DELETE FROM legislator WHERE session=? AND chamber=?",
+                        (session, chamber))
         for r in rows:
             self.db.execute(
-                "INSERT OR REPLACE INTO legislator VALUES (?,?,?,?,?,?)",
-                (chamber, r["url"], r["name"], r["display"], r["district"],
-                 r["party"]))
+                "INSERT OR REPLACE INTO legislator"
+                " (session,chamber,url,name,display,district,party)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (session, chamber, r["url"], r["name"], r["display"],
+                 r["district"], r["party"]))
         self.db.execute("COMMIT")
 
     def save_statute_refs(self, session, num, version, refs) -> None:
@@ -327,14 +366,14 @@ class Store:
                  r.words_deleted, int(r.in_title), int(r.in_body)))
         self.db.execute("COMMIT")
 
-    def save_member(self, chamber, district, name, party, url,
+    def save_member(self, session, chamber, district, name, party, url,
                     nickname: str = "") -> None:
         self.db.execute("BEGIN IMMEDIATE")
         self.db.execute(
             "INSERT OR REPLACE INTO member"
-            " (chamber,district,name,party,url,nickname)"
-            " VALUES (?,?,?,?,?,?)",
-            (chamber, district, name, party, url, nickname))
+            " (session,chamber,district,name,party,url,nickname)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (session, chamber, district, name, party, url, nickname))
         self.db.execute("COMMIT")
 
     def save_sponsor_finance(self, session, chamber, token, rec) -> None:

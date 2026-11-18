@@ -131,7 +131,13 @@ function body_for(array $doc, array $bills, string $email): string {
         if (!empty($b['one_line'])) {
             $out[] = '  ' . $b['one_line'];
         }
-        $out[] = '  ' . $base . '/bills/' . (int) ($b['num'] ?? 0) . '.html';
+        // The payload names the page. One written before it did is a 2026
+        // bill, whose pages sit directly under bills/.
+        $path = (string) ($b['path'] ?? '');
+        if (!preg_match('#^bills/(?:\d{4}[A-Z]?/)?\d{1,6}\.html$#', $path)) {
+            $path = 'bills/' . (int) ($b['num'] ?? 0) . '.html';
+        }
+        $out[] = '  ' . $base . '/' . $path;
         $out[] = '';
     }
     $out[] = str_repeat('-', 56);

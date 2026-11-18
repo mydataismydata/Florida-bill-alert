@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Statutes changed in {{ session }} · {{ site_name }}{% endblock %}
+{% block title %}Statutes changed in {{ years|and_list }} · {{ site_name }}{% endblock %}
 {% block body %}
-<h1>Statutes changed in {{ session }}</h1>
+<h1>Statutes changed in {{ years|and_list }}</h1>
 <p class="sub">{{ rows|length }} sections of Florida law were amended, created,
-   or repealed by bills filed this session.</p>
+   or repealed by bills filed in {{ 'these sessions' if years|length > 1 else 'this session' }}.</p>
 <label for="q" class="meta">Filter by section number</label>
 <input type="search" id="q" placeholder="e.g. 119.071" autocomplete="off">
 <div class="scroll"><table id="tbl">

@@ -23,20 +23,21 @@
 <section class="wrap" style="padding-top:24px" id="bills">
   <div class="areastrip" style="margin-top:0">
     <p>{{ '{:,}'.format(rows|length) }} bill{{ '' if rows|length == 1 else 's' }} in
-       the {{ session }} session — subscribe to see new ones the day they're filed.</p>
+       the {{ page_years|and_list }} session{{ 's' if page_years|length > 1 }} — subscribe to see new ones the day they're filed.</p>
     <a class="btn" href="{{ root }}subscribe.html?area={{ area_slug }}">Get alerts</a>
   </div>
 
   <div class="ledger-head" style="margin-top:28px">
     <h2>The record of bills</h2>
-    <div class="count" id="hint">SHOWING {{ '{:,}'.format(rows|length) }} — {{ area|upper }}</div>
+    <div class="count" id="hint">SHOWING {{ '{:,}'.format(shown|length) }} — {{ area|upper }}</div>
   </div>
   <div class="controls">
+    {{ ledger.year_select(page_years, year) }}
     <input type="search" id="q" placeholder="Search by number, title, sponsor, or vote (nay:Smith)" autocomplete="off">
     {{ ledger.filters(outcomes, 'all', area) }}
   </div>
 
-{{ ledger.table(rows, root) }}
+{{ ledger.table(shown, root, bill_dirs) }}
 
   <div style="margin:28px 0 0;border-top:1px solid var(--ru2);padding-top:20px">
     <div style="font:500 10px var(--mono);letter-spacing:.14em;color:var(--ink3)">OTHER AREAS</div>
@@ -48,5 +49,5 @@
   </div>
 </section>
 
-{{ ledger.script(rows, root, area|upper) }}
+{{ ledger.script(rows, root, area|upper, dirs=bill_dirs, years=page_years, year=year) }}
 {% endblock %}

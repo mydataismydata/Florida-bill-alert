@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "_ledger.html" as ledger %}
 {% block title %}{{ name }} — bills filed · {{ site_name }}{% endblock %}
-{% block description %}Every bill {{ name }} filed in the {{ session }} Florida legislative session.{% endblock %}
+{% block description %}Every bill {{ name }} filed in the {{ page_years|and_list }} Florida legislative session{{ 's' if page_years|length > 1 }}.{% endblock %}
 {% block masthead %}
 <header class="masthead compact">
   <div class="wordmark"><a href="{{ root }}index.html">KNOW YOUR LEGISLATION</a></div>
@@ -26,7 +26,7 @@
      a different thing and is not counted here. #}
   <div class="areastrip" style="margin-top:0">
     <p>{{ '{:,}'.format(rows|length) }} bill{{ '' if rows|length == 1 else 's' }} filed in
-       the {{ session }} session{% if enacted %}, {{ enacted }} of which became law{% endif %}.</p>
+       the {{ page_years|and_list }} session{{ 's' if page_years|length > 1 }}{% if enacted %}, {{ enacted }} of which became law{% endif %}.</p>
     <div class="offsite">
       {% if official %}<a href="{{ official }}" target="_blank" rel="noopener">Official page →</a>{% endif %}
       {% if donations %}<a href="{{ donations }}" target="_blank" rel="noopener"
@@ -36,15 +36,16 @@
 
   <div class="ledger-head" style="margin-top:28px">
     <h2>The record of bills</h2>
-    <div class="count" id="hint">SHOWING {{ '{:,}'.format(rows|length) }} — FILED</div>
+    <div class="count" id="hint">SHOWING {{ '{:,}'.format(shown|length) }} — FILED</div>
   </div>
   <div class="controls">
+    {{ ledger.year_select(page_years, year) }}
     <input type="search" id="q" placeholder="Search by number, title, sponsor, or vote (nay:Smith)" autocomplete="off">
     {{ ledger.filters(outcomes, 'all', 'filed') }}
   </div>
 
-{{ ledger.table(rows, root) }}
+{{ ledger.table(shown, root, bill_dirs) }}
 </section>
 
-{{ ledger.script(rows, root, 'filed') }}
+{{ ledger.script(rows, root, 'filed', dirs=bill_dirs, years=page_years, year=year) }}
 {% endblock %}

@@ -5,13 +5,13 @@
 {% block body %}
 
 <section class="hero">
-  <h1>{{ session }} Legislative Session</h1>
-  <div><button type="button" class="picker" data-picker>SESSION: {{ session }} · LATEST <span style="color:var(--ink3)">▾</span></button></div>
+  <h1 id="yearhead">{{ year }} Legislative Session</h1>
+  <div>{{ ledger.year_select(years, year, 'picker') }}</div>
 </section>
 
 <div class="stats" id="tiles">
   <a class="cell{{ ' on' if default_outcome == 'all' }}" href="#bills" data-outcome="all" data-noun="all bills">
-    <div class="n">{{ '{:,}'.format(bill_count) }}</div><div class="k">FILED</div></a>
+    <div class="n">{{ '{:,}'.format(year_count) }}</div><div class="k">FILED</div></a>
   {% for o in outcomes %}
   <a class="cell{{ ' law' if o.key == 'became_law' }}{{ ' on' if o.key == default_outcome }}"
      href="#bills" data-outcome="{{ o.key }}" data-noun="{{ o.label }}">
@@ -22,14 +22,14 @@
 <section class="wrap" style="padding-top:40px" id="bills">
   <div class="ledger-head">
     <h2>The record of bills</h2>
-    <div class="count" id="hint">SHOWING {{ '{:,}'.format(enacted|length) }} — {{ default_noun }}</div>
+    <div class="count" id="hint">SHOWING {{ '{:,}'.format(shown|length) }} — {{ default_noun }}</div>
   </div>
   <div class="controls">
     <input type="search" id="q" placeholder="Search by number, title, sponsor, or vote (nay:Smith)" autocomplete="off">
     {{ ledger.filters(outcomes, default_outcome, 'all bills') }}
   </div>
 
-{{ ledger.table(enacted, root) }}
+{{ ledger.table(shown, root, bill_dirs) }}
 
   <div style="margin:28px 0 0;border-top:1px solid var(--ru2);padding-top:20px">
     <div style="font:500 10px var(--mono);letter-spacing:.14em;color:var(--ink3)">FILED UNDER</div>
@@ -53,5 +53,6 @@
   </div>
 </section>
 
-{{ ledger.script(index_rows, root, default_noun, default_outcome) }}
+{{ ledger.script(index_rows, root, default_noun, default_outcome,
+                  dirs=bill_dirs, years=years, year=year) }}
 {% endblock %}

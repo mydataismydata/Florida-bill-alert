@@ -7,23 +7,41 @@
   the list and every row still links out.
 
   The pieces the home page has and an area page does not -- the outcome tiles,
-  the filter strip -- are looked up by id and skipped when absent, so one
-  script serves both.
+  the filter strip, the session picker -- are looked up by id and skipped when
+  absent, so one script serves both.
+
+  Each row carries its session in `y`, and `dirs` says which folder each
+  session's bill pages are in. The picker shows one session at a time, or
+  every session at once with a Year column. Search and filters only ever
+  look inside what the picker shows.
 #}
+
+{% macro year_select(years, year, cls='yearpick') %}
+{% if years|length > 1 %}
+{# Hidden until the script runs: without it, picking a year does nothing. #}
+<label class="{{ cls }}" data-year-pick hidden>SESSION:
+  <select id="year">
+    {%- for y in years %}<option value="{{ y }}"{{ ' selected' if y == year }}>{{ y }}</option>{% endfor -%}
+    <option value="all">ALL YEARS</option>
+  </select>
+</label>
+{% endif %}
+{% endmacro %}
 
 {% macro filters(outcomes, active, all_noun) %}
 <div class="filters" id="filters">
   {% for o in outcomes %}
   <a href="#bills" data-outcome="{{ o.key }}" data-noun="{{ o.label }}"
-     title="{{ '{:,}'.format(o.n) }} bill{{ '' if o.n == 1 else 's' }}"{{ ' class=on'|safe if o.key == active }}>{{ o.label|upper }}</a>
+     title="{{ '{:,}'.format(o.n) }} bill{{ '' if o.n == 1 else 's' }}"{{ ' class=on'|safe if o.key == active }}{{ ' hidden' if not o.n and o.key != active }}>{{ o.label|upper }}</a>
   {% endfor %}
   <a href="#bills" data-outcome="all" data-noun="{{ all_noun }}"{{ ' class=on'|safe if active == 'all' }}>ALL</a>
 </div>
 {% endmacro %}
 
-{% macro table(rows, root) %}
+{% macro table(rows, root, dirs) %}
 <table class="ledger" id="billtable">
   <thead><tr>
+    <th data-sort="y" tabindex="0" role="button" class="yr" hidden>YEAR</th>
     <th data-sort="n" class="asc" aria-sort="ascending" tabindex="0" role="button">NO.</th>
     <th data-sort="t" tabindex="0" role="button">TITLE</th>
     <th data-sort="f" tabindex="0" role="button">FILED BY</th>
@@ -31,7 +49,7 @@
   </tr></thead>
   <tbody>{% for b in rows %}
     <tr>
-      <td class="no"><a href="{{ root }}bills/{{ b.n }}.html">{{ b.l }}</a></td>
+      <td class="no"><a href="{{ root }}{{ dirs[b.y] }}{{ b.n }}.html">{{ b.l }}</a></td>
       <td class="title">{{ b.t }}</td>
       <td class="filed">
         {%- for who, stub in b.m -%}
@@ -48,7 +66,7 @@
 <div class="more" id="showall" style="display:none"><a href="#bills">SHOW ALL →</a></div>
 {% endmacro %}
 
-{% macro script(rows, root, noun, outcome='all', cap=400) %}
+{% macro script(rows, root, noun, outcome='all', cap=400, dirs={}, years=[], year='') %}
 <script id="rows" type="application/json">{{ rows|tojson }}</script>
 <script>
 (function () {
@@ -64,7 +82,12 @@
       tiles = document.getElementById('tiles'),
       filters = document.getElementById('filters'),
       outcome = {{ outcome|tojson }}, noun = {{ noun|tojson }},
-      capped = true, key = 'n', dir = 1;
+      capped = true, key = 'n', dir = 1,
+      DIRS = {{ dirs|tojson }}, YEARS = {{ years|tojson }},
+      FIRST = {{ year|tojson }}, year = FIRST,
+      sel = document.getElementById('year'),
+      yhead = head.querySelector('th[data-sort="y"]'),
+      heading = document.getElementById('yearhead');
 
   // "nay:Smith" finds the bills Smith voted against. Who voted which way is
   // several times the size of the bill rows, so it is its own file, fetched
@@ -100,7 +123,7 @@
     return hit;
   }
   function voted(r, vq) {
-    var b = votes && votes.b[r.n];
+    var b = votes && votes.b[r.y + '/' + r.n];
     if (!b) return false;
     for (var c = 0; c < vq.codes.length; c++) {
       var ids = b[vq.codes[c]] || [];
@@ -109,7 +132,9 @@
     return false;
   }
 
+  function inYear(r) { return year === 'all' || !year || r.y === year; }
   function matches(r) {
+    if (!inYear(r)) return false;
     if (outcome !== 'all' && r.o !== outcome) return false;
     var t = q.value.trim().toLowerCase();
     if (!t) return true;
@@ -136,7 +161,9 @@
   // sorts to the bottom either way round. Ties fall back to the bill number,
   // which is the order the page starts in.
   function cmp(a, b) {
-    if (key === 'n') return (a.n - b.n) * dir;
+    // Every session numbers its bills from 1, so with all of them showing a
+    // tie on the number goes to the newer session.
+    if (key === 'n') return (a.n - b.n) * dir || (a.y < b.y ? 1 : a.y > b.y ? -1 : 0);
     var x = keyOf(a), y = keyOf(b);
     if (!x !== !y) return x ? -1 : 1;
     return (x < y ? -1 : x > y ? 1 : 0) * dir || a.n - b.n;
@@ -164,12 +191,13 @@
         shown = capped ? hit.slice(0, CAP) : hit, html = '';
     for (var i = 0; i < shown.length; i++) {
       var r = shown[i];
-      html += '<tr><td class="no"><a href="' + ROOT + 'bills/' + r.n + '.html">' +
+      html += '<tr>' + (year === 'all' ? '<td class="yr">' + esc(r.y) + '</td>' : '') +
+              '<td class="no"><a href="' + ROOT + (DIRS[r.y] || 'bills/') + r.n + '.html">' +
               esc(r.l) + '</a></td><td class="title">' + esc(r.t) +
               '</td><td class="filed">' + filers(r) + '</td><td class="disp">' +
               esc(r.d) + '</td></tr>';
     }
-    body.innerHTML = html || '<tr><td colspan="4" class="title" style="padding:22px 4px;color:var(--ink3)">No bills match.</td></tr>';
+    body.innerHTML = html || '<tr><td colspan="' + (year === 'all' ? 5 : 4) + '" class="title" style="padding:22px 4px;color:var(--ink3)">No bills match.</td></tr>';
     if (hint) hint.textContent = (vq && voteState === 'loading') ? 'LOADING VOTES…'
       : (vq && voteState === 'failed') ? 'THE VOTES COULD NOT BE LOADED'
       : 'SHOWING ' + hit.length.toLocaleString() + (noun ? ' — ' + noun : '');
@@ -251,6 +279,68 @@
     capped = true;
     draw();
   });
+  // ---------------------------------------------------- the session picker
+  function counts() {
+    var n = {all: 0};
+    rows.forEach(function (r) {
+      if (!inYear(r)) return;
+      n[r.o] = (n[r.o] || 0) + 1;
+      n.all++;
+    });
+    return n;
+  }
+  // The tiles and filters keep their places. Their counts become the year's,
+  // and a filter the year has no bills for is put away rather than offered.
+  function recount() {
+    var n = counts();
+    if (outcome !== 'all' && !n[outcome]) {
+      var all = filters && filters.querySelector('a[data-outcome="all"]');
+      select('all', all ? labelOf(all) : 'ALL BILLS');
+    }
+    if (tiles) Array.prototype.forEach.call(tiles.querySelectorAll('a'), function (a) {
+      var el = a.querySelector('.n');
+      if (el) el.textContent = (n[a.getAttribute('data-outcome')] || 0).toLocaleString();
+    });
+    if (filters) Array.prototype.forEach.call(filters.querySelectorAll('a'), function (a) {
+      var k = a.getAttribute('data-outcome');
+      if (k === 'all') return;
+      var c = n[k] || 0;
+      a.hidden = !c && k !== outcome;
+      a.title = c.toLocaleString() + ' bill' + (c === 1 ? '' : 's');
+    });
+  }
+  function setYear(y) {
+    year = y;
+    if (sel) sel.value = y;
+    if (yhead) yhead.hidden = y !== 'all';
+    // All years together read newest session first; one year reads in bill
+    // order, as the page opens.
+    if (y === 'all') { key = 'y'; dir = -1; }
+    else if (key === 'y') { key = 'n'; dir = 1; }
+    if (heading) heading.textContent = y === 'all' ? 'Every legislative session'
+                                                   : y + ' Legislative Session';
+    capped = true;
+    recount();
+    marks();
+  }
+  // The choice is kept in the address, so a reload or a shared link opens on
+  // the same session. The session the page opens on needs no mention there.
+  function remember() {
+    var url = location.pathname + (year === FIRST ? '' : '?year=' + year) + location.hash;
+    if (history.replaceState) history.replaceState(null, '', url);
+  }
+  if (sel) {
+    var pickLabel = document.querySelector('[data-year-pick]');
+    if (pickLabel) pickLabel.hidden = false;
+    sel.addEventListener('change', function () {
+      setYear(sel.value); remember(); draw();
+    });
+    var want = new URLSearchParams(location.search).get('year');
+    if (want && want !== FIRST && (want === 'all' || YEARS.indexOf(want) >= 0)) {
+      setYear(want); draw();
+    }
+  }
+
   marks();
 })();
 </script>

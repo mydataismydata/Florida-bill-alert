@@ -128,6 +128,29 @@ up to the totals the PDF prints, and lists any it leaves out.
 
 Output lands in `site/`.
 
+### More than one session
+
+`build` renders every session in the database. `--session` picks the one the
+home page opens on; the others stay on the site, and every bill listing has a
+session picker with an "All years" choice that adds a Year column.
+
+Each session's bill pages get a folder of their own, `bills/2027/12.html`,
+because bill numbers start again each year. The 2026 pages stay at
+`bills/12.html`, where they were first published.
+
+A new session needs its own ingest and its own rosters, since an election
+changes who holds each seat:
+
+```bash
+$P -m flba --session 2027 enumerate
+$P -m flba --session 2027 bills
+$P -m flba --session 2027 docs
+$P -m flba --session 2027 crossref
+$P -m flba --session 2027 members --refresh   # this term's rosters
+$P -m flba --session 2027 finance
+$P -m flba --session 2027 build
+```
+
 Preview locally:
 
 ```bash
@@ -268,7 +291,9 @@ member on a roster gets a page, including one who filed nothing. Run it
 before `build`.
 
 Re-run the command when the chamber changes -- membership, party or district.
-It is cheap and the raw pages are cached.
+It is cheap and the raw pages are cached, so after an election pass
+`--refresh` to read the new term. Rosters are stored per session: a 2026 vote
+keeps naming the member who sat in 2026.
 
 ## Campaign finance
 
