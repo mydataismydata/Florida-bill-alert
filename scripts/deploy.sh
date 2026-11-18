@@ -11,7 +11,7 @@
 #   scripts/deploy.sh --go            # actually push
 #
 # Configure via environment (or a .env file kept out of git):
-#   FLBA_HOST=ubuntu@51.81.49.136
+#   FLBA_HOST=user@203.0.113.10
 #   FLBA_PATH=/srv/sessionwatch/site
 #
 # This is the path for a host that gives a shell. scripts/deploy.py is the
@@ -45,7 +45,7 @@ DEST="${FLBA_PATH:-}"
 
 if [[ -z "$HOST" || -z "$DEST" ]]; then
   echo "set FLBA_HOST and FLBA_PATH first, e.g.:" >&2
-  echo "  export FLBA_HOST=ubuntu@51.81.49.136" >&2
+  echo "  export FLBA_HOST=user@203.0.113.10" >&2
   echo "  export FLBA_PATH=/srv/sessionwatch/site" >&2
   exit 2
 fi

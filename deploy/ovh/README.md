@@ -78,11 +78,11 @@ it, so no request can name the database however it is spelled.
    `public/` rather than a second copy kept here, so the two cannot drift.
 
    ```bash
-   rsync -az --delete --filter 'protect schema.sql' --filter 'protect msmtprc' --filter 'protect docker-compose.override.yml' deploy/ovh/ ubuntu@51.81.49.136:/srv/sessionwatch/stack/
+   rsync -az --delete --filter 'protect schema.sql' --filter 'protect msmtprc' --filter 'protect docker-compose.override.yml' deploy/ovh/ user@203.0.113.10:/srv/sessionwatch/stack/
    ```
 
    ```bash
-   rsync -az public/schema.sql ubuntu@51.81.49.136:/srv/sessionwatch/stack/
+   rsync -az public/schema.sql user@203.0.113.10:/srv/sessionwatch/stack/
    ```
 
    The protect filters matter. `--delete` mirrors this directory, and three of
@@ -183,7 +183,7 @@ The site is served at `kyl.sjcrlc.org`. `sessionwatch.sjcrlc.org` is its old
 name and only redirects there, but it still needs a certificate of its own to
 do that over HTTPS.
 
-Both names have to point at `51.81.49.136` before an HTTP-01 challenge can
+Both names have to point at the server's address before an HTTP-01 challenge can
 succeed, which is the one step that cannot be done ahead of the move. Neither
 name may have an AAAA record. Let's Encrypt tries IPv6 first, so an AAAA
 record left pointing at the DNS host's parking page fails the challenge.
