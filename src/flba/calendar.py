@@ -10,8 +10,11 @@ moved, the Governor acted between the first and last approval.
 That makes the calendar a reading of the record rather than a claim about it,
 and it cannot drift out of date while the record is fresh. What it cannot give
 is anything the record does not contain -- committee weeks that produced no
-bill action, or next session's dates before next session exists. Those are
-marked as unconfirmed rather than invented.
+bill action, or next session's dates before next session exists.
+
+Those come from ANNOUNCED instead: dates the Legislature has published ahead
+of a session, each year with the document they were taken from. Once a
+session's record exists, its own opening day replaces the announced one.
 """
 from __future__ import annotations
 
@@ -20,6 +23,65 @@ import re
 from collections import Counter
 
 _DATE = "%m/%d/%Y"
+D = datetime.date
+
+# (first day, last day or None, what, key). The key lets the record replace
+# an announced date: "convene" gives way once bills have been introduced.
+ANNOUNCED = {
+    "2027": {
+        "source": "https://www.flsenate.gov/PublishedContent/Offices/President/"
+                  "2026-2027_Interim_Committee_Meeting_Schedule_.pdf",
+        "source_label": "the Senate's interim schedule of August 3, 2026",
+        "events": [
+            (D(2026, 11, 17), None,
+             "Organization session — the Legislature chooses its officers",
+             "organize"),
+            (D(2026, 11, 17), D(2026, 11, 19), "Training for senators", "training"),
+            (D(2026, 11, 30), D(2026, 12, 3), "Committee week", "committee"),
+            (D(2027, 1, 4), D(2027, 1, 7), "Committee week", "committee"),
+            (D(2027, 1, 11), D(2027, 1, 14), "Committee week", "committee"),
+            (D(2027, 2, 1), D(2027, 2, 4), "Committee week", "committee"),
+            (D(2027, 2, 8), D(2027, 2, 11), "Committee week", "committee"),
+            (D(2027, 2, 15), D(2027, 2, 18), "Committee week", "committee"),
+            (D(2027, 3, 2), None, "Session convenes", "convene"),
+            # Not in the memo. The Constitution limits a regular session to
+            # 60 consecutive days (Art. III, s. 3(d)), counted from opening day.
+            (D(2027, 4, 30), None, "Day 60 — the session's last scheduled day",
+             "day60"),
+        ],
+        "note": "Day 60 follows from the Constitution's limit of 60 days "
+                "on a regular session.",
+    },
+}
+
+
+def announced(year: str, m: dict | None = None) -> list[dict]:
+    """The dates announced for a year, less any its record now gives."""
+    out = []
+    for first, last, what, key in ANNOUNCED.get(year, {}).get("events", []):
+        if key == "convene" and m and m.get("introduced"):
+            continue
+        out.append({"first": first, "last": last, "label": what})
+    return out
+
+
+def _announced_day(year: str, key: str) -> datetime.date | None:
+    return next((first for first, _, _, k in
+                 ANNOUNCED.get(year, {}).get("events", []) if k == key), None)
+
+
+def status(year: str, today: datetime.date, m: dict | None) -> str:
+    """UPCOMING before opening day, OPEN until the Governor is done, then
+    CLOSED. The record decides where it has the dates, the announced
+    schedule where it does not."""
+    intro = m.get("introduced") if m else None
+    convene = intro[0] if intro else _announced_day(year, "convene")
+    if convene and today < convene:
+        return "UPCOMING"
+    if intro:
+        return "CLOSED" if phase(today, m)[1] == "recess" else "OPEN"
+    day60 = _announced_day(year, "day60")
+    return "OPEN" if day60 and today <= day60 else "CLOSED"
 
 
 def parse(text: str) -> datetime.date | None:

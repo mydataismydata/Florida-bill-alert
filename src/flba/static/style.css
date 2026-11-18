@@ -533,7 +533,7 @@ input[type="radio"]:focus-visible + .radio { outline: 2px solid var(--acc); }
   font: 400 10px var(--mono); letter-spacing: .12em; color: var(--ink3); }
 
 /* ============================================================== calendar */
-.calrow { display: grid; grid-template-columns: 110px 1fr; gap: 14px;
+.calrow { display: grid; grid-template-columns: 136px 1fr; gap: 14px;
   padding: 11px 0; border-bottom: 1px solid var(--ru2); align-items: baseline; }
 .calrow .d { font: 500 11.5px var(--mono); color: var(--ink3); }
 .calrow .e { font-size: 15px; color: var(--ink2); }

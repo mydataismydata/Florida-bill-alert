@@ -25,6 +25,10 @@ from .stages import OUTCOME_SHORT, kind_of, pathway, track
 HERE = Path(__file__).resolve().parent
 SITE_NAME = "Know Your Legislation"
 REPO = "https://github.com/mydataismydata/Florida-bill-alert"
+# "1.0.0 (001)": the release, then the build number. The build number goes up
+# by one for every release to the public site and never starts over. The
+# release goes up with it when what the site does changes.
+VERSION_FILE = HERE.parents[1] / "VERSION"
 MAX_BLOCKS = 12           # changed passages on the summary page
 # Key provisions are the point of the page, so they are shown. The fold
 # only exists for a bill long enough that the list stops being readable,
@@ -448,8 +452,10 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     voter_ids: dict[str, int] = {}
     vote_index: dict[str, dict] = {}
 
+    release = (VERSION_FILE.read_text().strip()
+               if VERSION_FILE.exists() else "")
     common = dict(site_name=SITE_NAME, session=session, built=built,
-                  repo=REPO, bill_count=len(bills), local=local,
+                  release=release, repo=REPO, bill_count=len(bills), local=local,
                   areas=[{"name": a, "slug": slug(a)} for a in AREAS],
                   page="")
 
@@ -742,21 +748,60 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                 **common), encoding="utf-8")
 
     # --------------------------------------------------------- calendar
-    from .calendar import milestones, phase as cal_phase
-    hist_rows = [(h["date"], h["action"])
-                 for rows in history.values() for h in rows]
-    eff = [b["effective_date"] for b in bills
-           if b["chapter_law"] and b["effective_date"]]
-    m = milestones(hist_rows, eff)
+    from .calendar import (ANNOUNCED, announced, milestones,
+                           phase as cal_phase, status as cal_status)
     today = date.fromisoformat(built)
-    label, key = cal_phase(today, m)
     fmt = lambda d: d.strftime("%b %-d, %Y").upper()
+
+    def span(first, last):
+        if not last or last == first:
+            return fmt(first)
+        if (first.year, first.month) == (last.year, last.month):
+            return f"{first:%b} {first.day}–{last.day}, {last.year}".upper()
+        if first.year == last.year:
+            return f"{first:%b} {first.day}–{last:%b} {last.day}, {last.year}".upper()
+        return f"{fmt(first)}–{fmt(last)}"
+
+    def record(s):
+        """A session's dated actions and the dates its laws take effect."""
+        if s == session:
+            return ([(h["date"], h["action"])
+                     for rows in history.values() for h in rows],
+                    [b["effective_date"] for b in bills
+                     if b["chapter_law"] and b["effective_date"]])
+        return ([(r["date"], r["action"]) for r in
+                 _rows(db, "SELECT date, action FROM history WHERE session=?", s)],
+                [r["effective_date"] for r in
+                 _rows(db, "SELECT effective_date FROM bill WHERE session=?"
+                           " AND chapter_law<>'' AND effective_date<>''", s)])
+
+    # Every session the database holds and every one with announced dates,
+    # newest first. A new session goes on top and the older ones stay below
+    # it. Within each, the latest date comes first.
+    sessions = ({r["session"] for r in
+                 _rows(db, "SELECT DISTINCT session FROM history")}
+                | set(ANNOUNCED) | {session})
+    years, m_here = [], None
+    for s in sorted(sessions, key=int, reverse=True):
+        hist_rows, eff = record(s)
+        m = milestones(hist_rows, eff) if hist_rows else None
+        if s == session:
+            m_here = m
+        events = [{"first": d, "last": None, "label": t}
+                  for d, t in (m["events"] if m else [])] + announced(s, m)
+        events.sort(key=lambda e: (e["first"], e["last"] or e["first"]),
+                    reverse=True)
+        years.append({
+            "year": s, "status": cal_status(s, today, m), "here": s == session,
+            "events": [{"date": span(e["first"], e["last"]), "label": e["label"]}
+                       for e in events],
+            "effective": [{"date": fmt(x["date"]), "n": x["n"], "big": x["big"]}
+                          for x in reversed(m["effective"] if m else [])],
+            "action_count": len(hist_rows), "announced": ANNOUNCED.get(s)})
+    label, key = cal_phase(today, m_here or {})
     (out / "calendar.html").write_text(env.get_template("calendar.html").render(
         root="", today=fmt(today), phase_label=label, phase_key=key,
-        closed=key == "recess", action_count=len(hist_rows),
-        events=[{"date": fmt(d), "label": t} for d, t in m["events"]],
-        effective=[{"date": fmt(x["date"]), "n": x["n"], "big": x["big"]}
-                   for x in m["effective"]],
+        years=years,
         seasons=[
             {"when": "JAN–MAR · DURING SESSION",
              "what": "A daily alert naming every new bill in the areas you "

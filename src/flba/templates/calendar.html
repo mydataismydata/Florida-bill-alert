@@ -17,7 +17,7 @@
 <section class="pagehead">
   <div class="row">
     <div>
-      <div style="font:400 10px var(--mono);letter-spacing:.3em;color:var(--ink3)">{{ session }} LEGISLATIVE YEAR</div>
+      <div style="font:400 10px var(--mono);letter-spacing:.3em;color:var(--ink3)">{{ years|map(attribute='year')|join(' · ') }} LEGISLATIVE YEAR{{ 'S' if years|length > 1 }}</div>
       <h1>Session calendar</h1>
     </div>
     <div style="margin-top:18px"><span class="stamp">{{ phase_label }} · {{ today }}</span></div>
@@ -26,27 +26,34 @@
 
 <div class="twocol">
   <div>
-    <div class="slabel">{{ session }} REGULAR SESSION — {{ 'CLOSED' if closed else 'OPEN' }}</div>
+    {% for y in years %}
+    <div class="slabel"{% if not loop.first %} style="margin-top:48px"{% endif %}>{{ y.year }} REGULAR SESSION — {{ y.status }}</div>
     <div>
-      {% for e in events %}
+      {% for e in y.events %}
       <div class="calrow"><div class="d">{{ e.date }}</div><div class="e">{{ e.label }}</div></div>
       {% endfor %}
     </div>
 
-    <div class="slabel" style="margin-top:34px">WHEN THE LAWS TAKE EFFECT</div>
+    {% if y.effective %}
+    <div class="slabel" style="margin-top:34px">WHEN THE {{ y.year }} LAWS TAKE EFFECT</div>
     <div>
-      {% for x in effective %}
+      {% for x in y.effective %}
       <div class="calrow{{ ' hi' if x.big }}">
         <div class="d">{{ x.date }}</div>
         <div class="e">{{ x.n }} law{{ '' if x.n == 1 else 's' }} take{{ 's' if x.n == 1 }} effect
-          {%- if x.big %} — <a href="{{ root }}index.html#bills" style="color:var(--acc)">see the list →</a>{% endif %}</div>
+          {%- if x.big and y.here %} — <a href="{{ root }}index.html#bills" style="color:var(--acc)">see the list →</a>{% endif %}</div>
       </div>
       {% endfor %}
     </div>
-    <p class="unverified" style="margin-top:22px">Read from {{ '{:,}'.format(action_count) }}
+    {% endif %}
+    <p class="unverified" style="margin-top:22px">
+      {%- if y.announced %}Dates announced in
+      <a href="{{ y.announced.source }}" target="_blank" rel="noopener">{{ y.announced.source_label }}</a>.
+      {{ y.announced.note }}{% endif %}
+      {%- if y.action_count %}{{ ' ' if y.announced }}Read from {{ '{:,}'.format(y.action_count) }}
       dated actions in the official record, not from a published calendar.
-      Committee weeks that produced no bill action do not appear, and the next
-      session's dates are not set here until its bills exist.</p>
+      Committee weeks that produced no bill action do not appear.{% endif %}</p>
+    {% endfor %}
   </div>
 
   <aside>
