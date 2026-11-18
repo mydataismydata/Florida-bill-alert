@@ -297,8 +297,8 @@ footer.site a { color: var(--acc2); }
   color: var(--ink3); padding-top: 3px; }
 .factledger .v { font-size: 15px; word-break: break-word; }
 .factledger .v a { color: var(--acc); }
-.factledger a.donations { font: 500 11px var(--mono); letter-spacing: .04em;
-  white-space: nowrap; }
+.factledger .donations { font: 500 11px var(--mono); letter-spacing: .04em; }
+.factledger a.donations { white-space: nowrap; }
 .factledger .filer + .filer { margin-top: 3px; }
 
 /* subscribe-to-this-area strip */

@@ -31,6 +31,8 @@ reports as a 404 and this module treats as "no link", not as an error.
 """
 from __future__ import annotations
 
+import calendar
+import datetime
 import json
 import re
 import time
@@ -302,3 +304,83 @@ def match(token: str, index: dict[str, list[dict]]) -> dict | None:
     if len({(r["givens"] or [""])[0].lower() for r in rows}) != 1:
         return None
     return rows[0]
+
+
+# --- the links a bill page shows ---------------------------------------------
+#
+# `flba finance` stores one link per sponsor: their whole record on PAC
+# Tracker. A bill page shows two narrower views of it beside that one, and
+# both are worked out here at build time. The window around a filing date
+# belongs to a bill rather than to a sponsor, so it cannot be stored with the
+# sponsor's row.
+
+def general_election(year: int) -> datetime.date:
+    """Florida's general election day: the Tuesday after the first Monday
+    in November. 2026 -> 3 November 2026."""
+    first = datetime.date(year, 11, 1)
+    monday = first + datetime.timedelta(days=-first.weekday() % 7)
+    return monday + datetime.timedelta(days=1)
+
+
+def election_cycle(session: str) -> tuple[int, str] | None:
+    """The election a session's fundraising counts toward, and the id PAC
+    Tracker files that cycle under.
+
+    A session in an even year is in that year's cycle. One in an odd year is
+    in the next one, because no general election falls in an odd year.
+
+        '2026' -> (2026, '20261103-GEN')
+        '2027' -> (2028, '20281107-GEN')
+    """
+    m = re.match(r"\d{4}", session or "")
+    if not m:
+        return None
+    year = int(m.group())
+    year += year % 2
+    return year, f"{general_election(year):%Y%m%d}-GEN"
+
+
+def shift_months(day: datetime.date, months: int) -> datetime.date:
+    """The same day of the month, `months` away. A day the target month does
+    not have becomes its last day: 31 March less one month is 28 February."""
+    index = day.month - 1 + months
+    year, month = day.year + index // 12, index % 12 + 1
+    return day.replace(year=year, month=month,
+                       day=min(day.day, calendar.monthrange(year, month)[1]))
+
+
+def with_query(url: str, **params: str) -> str:
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}{urllib.parse.urlencode(params)}"
+
+
+def donation_links(url: str, name: str, session: str,
+                   filed: datetime.date | None) -> list[dict]:
+    """The three ways into one sponsor's donations, narrowest first.
+
+    `url` is the sponsor's PAC Tracker page as `flba finance` stored it. A
+    bill with no recorded filing date gets no window, and a session that
+    names no year gets no cycle. The whole record is always there.
+    """
+    show = lambda d: f"{d:%b} {d.day}, {d.year}"
+    links = []
+    if filed:
+        start, end = shift_months(filed, -1), shift_months(filed, 1)
+        links.append({
+            "label": "donations +/- 1 month",
+            "href": with_query(url, **{"from": start.isoformat(),
+                                       "to": end.isoformat()}),
+            "title": (f"Donations to {name} dated {show(start)} to {show(end)}, "
+                      f"a month either side of the day this bill was filed"),
+        })
+    cycle = election_cycle(session)
+    if cycle:
+        year, cycle_id = cycle
+        links.append({
+            "label": f"all {year} donations",
+            "href": with_query(url, cycle=cycle_id),
+            "title": f"Donations to {name} in the {year} election cycle",
+        })
+    links.append({"label": "every donation", "href": url,
+                  "title": f"Every donation to {name} on file"})
+    return links

@@ -48,9 +48,10 @@
           title="Everything {{ m.member_name }} filed this session">{{ m.member_name }}</a>
         {%- else %}{{ m.member_name or m.token }}{% endif %}
         {%- if m.district %} — District {{ m.district }}, {{ m.party }}{% endif %}
-        {%- if m.url %} <a class="donations" href="{{ m.url }}" target="_blank"
-          rel="noopener"
-          title="Campaign filings for {{ m.member_name }}">[search donations]</a>
+        {%- if m.donations %} <span class="donations">[
+          {%- for d in m.donations %}{% if not loop.first %} · {% endif %}<a class="donations"
+          href="{{ d.href }}" target="_blank" rel="noopener"
+          title="{{ d.title }}">{{ d.label }}</a>{% endfor %}]</span>
         {%- endif %}
       </div>
       {% endfor %}

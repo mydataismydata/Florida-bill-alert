@@ -423,6 +423,9 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                     _rows(db, "SELECT * FROM sponsor_finance"
                               " WHERE session=? AND member_name<>''", session)}
 
+    from .calendar import parse as parse_day
+    from .finance import donation_links
+
     # Every bill a member filed, for the page that answers "what else have
     # they put their name to". Keyed the way a sponsor token is: one person
     # per chamber.
@@ -506,12 +509,20 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         filed_by = [
             dict(sponsors.get((b["chamber"], token)) or {}, token=token)
             for token in members]
+        # The day the bill was filed: its first "Filed" action. The donations
+        # dated a month either side of it are one of the views of who funds
+        # its sponsor.
+        filed_on = next((parse_day(h["date"]) for h in history.get(b["num"], [])
+                         if (h["action"] or "").strip() == "Filed"), None)
         for f in filed_by:
             # The name leads to their own page here rather than out to the
             # chamber's site: what a reader wants next is the rest of what
             # this person filed, and the official page is one click on from
             # there.
             f["slug"] = member_slug(f["member_name"]) if f.get("member_name") else ""
+            f["donations"] = (donation_links(f["url"], f["member_name"],
+                                             session, filed_on)
+                              if f.get("url") else [])
         # Who the listing names, and where each of them has a page. Taken
         # before the row below is thinned out, and paired rather than
         # derived: a committee has no page, and a slug guessed from a name
