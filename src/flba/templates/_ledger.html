@@ -322,11 +322,20 @@
     capped = true;
     recount();
     marks();
-    // Anything else on the page that belongs to some sessions and not
-    // others -- the home page's area chips -- names them in data-years.
+    others(y);
+  }
+  // Anything else on the page that belongs to some sessions and not others
+  // -- the area chips -- names them in data-years. A chip that stays also
+  // carries the year, so the area page it opens shows the same one.
+  function others(y) {
+    if (!y) return;
     Array.prototype.forEach.call(document.querySelectorAll('[data-years]'), function (el) {
       var ys = el.getAttribute('data-years').split(' ').filter(Boolean);
       el.hidden = y === 'all' ? !ys.length : ys.indexOf(y) < 0;
+      if (el.tagName === 'A') {
+        el.setAttribute('href', el.getAttribute('href').split('?')[0] +
+                                '?year=' + encodeURIComponent(y));
+      }
     });
   }
   // The choice is kept in the address, so a reload or a shared link opens on
@@ -335,16 +344,21 @@
     var url = location.pathname + (year === FIRST ? '' : '?year=' + year) + location.hash;
     if (history.replaceState) history.replaceState(null, '', url);
   }
+  // The year a link brought the reader here with, if it is one this page has.
+  var want = new URLSearchParams(location.search).get('year');
+  if (!(want === 'all' || YEARS.indexOf(want) >= 0)) want = null;
   if (sel) {
     var pickLabel = document.querySelector('[data-year-pick]');
     if (pickLabel) pickLabel.hidden = false;
     sel.addEventListener('change', function () {
       setYear(sel.value); remember(); draw();
     });
-    var want = new URLSearchParams(location.search).get('year');
-    if (want && want !== FIRST && (want === 'all' || YEARS.indexOf(want) >= 0)) {
-      setYear(want); draw();
-    }
+    if (want && want !== FIRST) { setYear(want); draw(); }
+    others(year);
+  } else {
+    // One session here and so no picker, but a reader who came looking at
+    // every year keeps every year's chips.
+    others(want || year);
   }
 
   marks();

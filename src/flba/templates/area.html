@@ -43,7 +43,12 @@
     <div style="font:500 10px var(--mono);letter-spacing:.14em;color:var(--ink3)">OTHER AREAS</div>
     <div class="chips">
       {% for a in areas %}
-      <a class="chip{{ ' on' if a.slug == area_slug }}" href="{{ root }}area/{{ a.slug }}.html">{{ a.name }}</a>
+      {% if a.slug == area_slug %}
+      <a class="chip on" href="{{ root }}area/{{ a.slug }}.html">{{ a.name }}</a>
+      {% else %}
+      {% set ys = area_years[a.slug] %}
+      <a class="chip" href="{{ root }}area/{{ a.slug }}.html" data-years="{{ ys|join(' ') }}"{{ ' hidden' if year not in ys }}>{{ a.name }}</a>
+      {% endif %}
       {% endfor %}
     </div>
   </div>

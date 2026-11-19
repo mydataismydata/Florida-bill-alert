@@ -779,14 +779,16 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
     shown = [r for r in featured_rows
              if default_outcome == "all" or r["o"] == default_outcome]
 
+    # Which sessions each area has bills in, so an area's chip shows only
+    # when the year on show has some.
+    area_years = {slug(a): sorted({r["y"] for r in by_area.get(a, [])},
+                                  reverse=True) for a in AREAS}
+
     (out / "index.html").write_text(env.get_template("index.html").render(
         root="", outcomes=outcome_cards, default_outcome=default_outcome,
         default_noun=default_noun, shown=shown, year_count=len(featured_rows),
         index_rows=index_rows, year=featured,
-        # Which sessions each area has bills in, so its chip shows only when
-        # the year on show has some.
-        area_years={slug(a): sorted({r["y"] for r in by_area.get(a, [])},
-                                    reverse=True) for a in AREAS},
+        area_years=area_years,
         top_statutes=stat_rows[:10], **common), encoding="utf-8")
 
     # ------------------------------------------------------------ areas
@@ -803,6 +805,7 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
                 shown=[r for r in rows if r["y"] == page_years[0]],
                 outcomes=year_cards(rows, page_years[0]),
                 page_years=page_years, year=page_years[0],
+                area_years=area_years,
                 **common), encoding="utf-8")
 
     # ----------------------------------------------------------- members
