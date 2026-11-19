@@ -35,7 +35,8 @@
     <div style="font:500 10px var(--mono);letter-spacing:.14em;color:var(--ink3)">FILED UNDER</div>
     <div class="chips">
       {% for a in areas %}
-      <a class="chip" href="{{ root }}area/{{ a.slug }}.html">{{ a.name }}</a>
+      {% set ys = area_years[a.slug] %}
+      <a class="chip" href="{{ root }}area/{{ a.slug }}.html" data-years="{{ ys|join(' ') }}"{{ ' hidden' if year not in ys }}>{{ a.name }}</a>
       {% endfor %}
     </div>
   </div>

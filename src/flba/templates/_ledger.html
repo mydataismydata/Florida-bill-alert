@@ -322,6 +322,12 @@
     capped = true;
     recount();
     marks();
+    // Anything else on the page that belongs to some sessions and not
+    // others -- the home page's area chips -- names them in data-years.
+    Array.prototype.forEach.call(document.querySelectorAll('[data-years]'), function (el) {
+      var ys = el.getAttribute('data-years').split(' ').filter(Boolean);
+      el.hidden = y === 'all' ? !ys.length : ys.indexOf(y) < 0;
+    });
   }
   // The choice is kept in the address, so a reload or a shared link opens on
   // the same session. The session the page opens on needs no mention there.

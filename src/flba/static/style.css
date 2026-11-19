@@ -150,6 +150,7 @@ input:focus, select:focus { border-color: var(--acc); }
   font: 400 12px var(--mono); }
 .chip:hover { border-color: var(--acc); color: var(--acc); text-decoration: none; }
 .chip.on { border-color: var(--acc); color: var(--acc); }
+.chip[hidden] { display: none; }
 
 /* ------------------------------------------------------------------ hero */
 .hero { padding: 46px var(--pad) 38px; text-align: center;
@@ -467,16 +468,18 @@ body.drawer-on { overflow: hidden; }
 .products.choose label.sel { border-color: var(--acc); }
 .products.choose .t { font-size: 16px; font-weight: 700; }
 .products.choose .d { margin: 6px 0 0; font-size: 14px; color: var(--ink2); }
-.box { width: 14px; height: 14px; border: 1px solid var(--ink3); display: inline-block;
-  vertical-align: -2px; margin-right: 9px; text-align: center; line-height: 12px;
-  font: 600 11px var(--mono); color: transparent; }
+.box { width: 17px; height: 17px; border: 1.5px solid var(--ink3); display: inline-block;
+  vertical-align: -3px; margin-right: 10px; text-align: center; line-height: 14px;
+  font: 700 12px var(--mono); color: transparent; flex: none; }
 input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
+/* Ticked: filled, so a ticked box reads at a glance from an empty one. */
 input[type="checkbox"]:checked + .box,
-label.sel .box { border-color: var(--acc); color: var(--acc); }
-input[type="checkbox"]:focus-visible + .box { outline: 2px solid var(--acc); }
+label.sel .box { border-color: var(--acc); background: var(--acc); color: var(--aInk); }
+input[type="checkbox"]:focus-visible + .box { outline: 2px solid var(--acc);
+  outline-offset: 2px; }
 /* Some but not all: a dash, drawn rather than typed, since the tick is text. */
 input[type="checkbox"]:indeterminate + .box { border-color: var(--acc); color: transparent;
-  background: linear-gradient(var(--acc), var(--acc)) center / 6px 2px no-repeat; }
+  background: linear-gradient(var(--acc), var(--acc)) center / 8px 2px no-repeat; }
 /* Single-select "subscribing as": a round control, not the square tick box. */
 input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
 .radio { width: 14px; height: 14px; border: 1px solid var(--ink3); border-radius: 50%;
@@ -499,8 +502,13 @@ input[type="radio"]:focus-visible + .radio { outline: 2px solid var(--acc); }
 .formledger .f select { width: 100%; max-width: 380px; }
 .formledger .opts { display: flex; gap: 20px; flex-wrap: wrap; padding-top: 10px;
   font-size: 14.5px; }
-.formledger .grid3 { display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 10px 18px; padding-top: 8px; font-size: 14.5px; }
+/* A list of tick boxes, three to a row. Each name has a cell of its own, so
+   its box never ends one line while the name starts the next, and a long
+   name wraps beside its box rather than under it. */
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 28px; }
+.grid3 label { display: flex; align-items: flex-start; cursor: pointer; }
+.grid3 label .box { margin-top: .2em; }
+.formledger .grid3 { gap: 12px 22px; padding-top: 8px; font-size: 14.5px; }
 .formledger .selall { display: inline-block; padding-top: 8px; font-size: 14.5px;
   font-weight: 600; cursor: pointer; }
 .formledger .selall + .grid3 { margin-top: 10px; padding-top: 12px;
@@ -566,7 +574,7 @@ input[type="radio"]:focus-visible + .radio { outline: 2px solid var(--acc); }
   .formledger .frow { grid-template-columns: 30px 1fr; }
   .formledger .k { grid-column: 2; padding-top: 0; }
   .formledger .f { grid-column: 2; }
-  .formledger .grid3 { grid-template-columns: repeat(2, 1fr); }
+  .grid3, .formledger .grid3 { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* Folded rows are in the document -- print and find-in-page see them. */

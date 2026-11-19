@@ -783,6 +783,10 @@ def build(db_path: Path, out: Path, session: str, built: str | None = None,
         root="", outcomes=outcome_cards, default_outcome=default_outcome,
         default_noun=default_noun, shown=shown, year_count=len(featured_rows),
         index_rows=index_rows, year=featured,
+        # Which sessions each area has bills in, so its chip shows only when
+        # the year on show has some.
+        area_years={slug(a): sorted({r["y"] for r in by_area.get(a, [])},
+                                    reverse=True) for a in AREAS},
         top_statutes=stat_rows[:10], **common), encoding="utf-8")
 
     # ------------------------------------------------------------ areas
