@@ -33,6 +33,20 @@ def test_an_empty_window_writes_nothing(db, tmp_path):
     assert not list(tmp_path.glob("*.json"))
 
 
+def test_consecutive_dailies_never_repeat_a_bill(db, tmp_path):
+    """Each day falls in exactly one daily, so a bill is announced once."""
+    from datetime import timedelta
+
+    from flba.digest import build
+    start = date(2025, 9, 1)
+    seen: list[int] = []
+    for i in range(60):
+        doc = build(db, "2026", tmp_path / str(i), "daily",
+                    today=start + timedelta(days=i))
+        seen += [b["num"] for b in doc["bills"]] if doc else []
+    assert seen and len(seen) == len(set(seen))
+
+
 def test_a_payload_names_bills_and_nothing_more(db, tmp_path):
     from flba.digest import build
     doc = build(db, "2026", tmp_path, "weekly", today=date(2025, 10, 1), days=30)

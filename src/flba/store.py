@@ -218,7 +218,12 @@ class Store:
     _ADDED = (("member", "nickname", "TEXT DEFAULT ''"),
               ("sponsor_finance", "member_url", "TEXT DEFAULT ''"),
               ("analysis_ai", "corrections", "TEXT DEFAULT '[]'"),
-              ("roll_call", "position", "TEXT DEFAULT ''"))
+              ("roll_call", "position", "TEXT DEFAULT ''"),
+              # The last action as the session's bill LIST words it, which
+              # is not how the bill's own page words it ("S Filed" there,
+              # "Senate - Filed" here). `bills --changed` compares a fresh
+              # list against this to find the bills that moved.
+              ("bill", "list_action", "TEXT DEFAULT ''"))
 
     def _add_missing_columns(self) -> None:
         for table, column, decl in self._ADDED:

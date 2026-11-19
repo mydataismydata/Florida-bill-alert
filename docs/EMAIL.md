@@ -61,6 +61,11 @@ flba --session 2026 digest --product daily
 scripts/deploy.sh --go                     # ships payloads with the HTML
 ```
 
+The daily covers yesterday and the weekly the seven days before today; neither
+includes today, so alerts written each morning never name a bill twice. In
+session `scripts/nightly.sh` does all of this; see
+[SETUP.md](SETUP.md#the-nightly-run).
+
 An empty window writes nothing. A digest that arrives to report that nothing
 happened teaches people to ignore the next one.
 

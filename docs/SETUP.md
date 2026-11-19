@@ -227,6 +227,48 @@ Writes `dist/_deploy.zip` and `dist/_unpack.php`. Upload those two by hand,
 open the URL it prints, done — two files rather than the whole tree. It cannot
 delete files that left the site, so it prints those for you to remove.
 
+## The nightly run
+
+In session, the whole cycle runs once a night on the analysis box (the Mac
+Studio), from one script:
+
+```bash
+scripts/nightly.sh               # ingest, analyse, publish, mail
+scripts/nightly.sh --no-deploy   # the same, without pushing anything
+```
+
+| stage | what it does |
+|---|---|
+| ingest | `enumerate --refresh`, then `bills --changed`: new bills, and bills whose last action on the list has moved since they were fetched. Then their documents, roll calls, statute index and sponsors. |
+| analyse | `analyze --stale`: bills with no analysis, and bills whose analysis is of an older version than the text now shown. A re-run replaces any hand edits. |
+| publish | builds the public site fresh into `.working/site-public` and pushes it. `site/` is left as the operator build. |
+| daily | writes the alert for **yesterday** and pushes it; `send.php` mails it within five minutes. |
+| weekly | on Mondays, the same for the seven days before. |
+
+The pages are pushed before the alert is written, because the alert links to
+them and `send.php` sends a payload as soon as it lands. If the push fails, no
+alert is written that night. Each window ends the day before the run, so
+consecutive alerts never name the same bill twice.
+
+The session is 2027 unless `FLBA_SESSION` says otherwise. The log is
+`data/logs/nightly-YYYY-MM-DD.log`; a failed step also raises a macOS
+notification. The database is backed up before each run into `data/backup/`,
+seven kept.
+
+### Scheduling it
+
+```bash
+scripts/install_nightly.sh          # daily at 05:00
+scripts/install_nightly.sh 4 30     # or another time
+scripts/install_nightly.sh --remove
+launchctl kickstart gui/$(id -u)/org.knowyourlegislation.nightly   # run now
+```
+
+It is a LaunchAgent, so it runs in the logged-in session, like oMLX. The box
+has to stay logged in, oMLX has to start with it and load the model, and
+`ssh` to the public host has to work without a prompt (accept its host key
+once by hand).
+
 ## Running the site locally, with the operator controls
 
 A plain build is what gets deployed: static files, no controls, nothing that

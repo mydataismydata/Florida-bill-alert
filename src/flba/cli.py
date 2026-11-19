@@ -152,6 +152,17 @@ def cmd_bills(args) -> int:
     if args.limit:
         bills = bills[:args.limit]
     done = set() if args.refresh else store.known_bill_nums(args.session)
+    if args.changed and done:
+        # A bill already parsed whose last action on the fresh list differs
+        # from the one recorded when it was last fetched has moved: a new
+        # version, a vote, a referral. A bill fetched before this column
+        # existed has none recorded, so it is fetched once more to get one.
+        seen = {r["num"]: r["list_action"] for r in store.db.execute(
+            "SELECT num, list_action FROM bill WHERE session=?", (args.session,))}
+        moved = {b["num"] for b in bills
+                 if b["num"] in done and seen.get(b["num"]) != b.get("last_action", "")}
+        done -= moved
+        print(f"bills: {len(moved)} already parsed have moved since")
     todo = [b for b in bills if b["num"] not in done]
     print(f"bills: {len(todo)} to fetch ({len(bills)-len(todo)} already parsed)")
 
@@ -166,6 +177,8 @@ def cmd_bills(args) -> int:
         try:
             rec = flsenate.parse_bill_page(res.text(), args.session, b["num"])
             store.save_bill(rec)
+            store.db.execute("UPDATE bill SET list_action=? WHERE session=? AND num=?",
+                             (b.get("last_action", ""), args.session, b["num"]))
         except Exception as exc:                       # keep going, report at end
             failures.append((b["num"], f"parse: {exc}"))
         if prog.n % 50 == 0:
@@ -948,6 +961,14 @@ def cmd_analyze(args) -> int:
         nums = [int(re.search(r"(\d+)", args.number).group(1))]
     else:
         done = set() if args.refresh else store.analysed_nums(args.session)
+        if args.stale and done:
+            # An analysis describes one version of the bill. Once a newer
+            # version is the one the site shows, it describes text that is no
+            # longer the bill, so it is done again. Hand edits go with it.
+            done = {r["num"] for r in db.execute(
+                "SELECT a.num FROM analysis_ai a JOIN bill_render r"
+                " ON r.session=a.session AND r.num=a.num"
+                " WHERE a.session=? AND a.version=r.version", (args.session,))}
         rows = db.execute(ORDER_SQL[args.order] if args.order in ORDER_SQL
                           else ORDER_SQL["number"], (args.session,)).fetchall()
         nums = [r["num"] for r in rows if r["num"] not in done]
@@ -1131,6 +1152,9 @@ def main(argv=None) -> int:
                             help="only bills the Governor vetoed")
             sp.add_argument("--chamber", choices=["House", "Senate"],
                             help="only bills filed in one chamber")
+            sp.add_argument("--stale", action="store_true",
+                            help="also re-analyse bills whose analysis is of "
+                                 "an older version than the current text")
             sp.add_argument("--area",
                             help="only one area, by name or slug, e.g. "
                                  "'AI & Technology' or ai-technology; "
@@ -1148,7 +1172,8 @@ def main(argv=None) -> int:
                             choices=["daily", "weekly", "both"])
             sp.add_argument("--date", help="pretend today is this ISO date")
             sp.add_argument("--days", type=int,
-                            help="window in days (default 1 daily, 7 weekly)")
+                            help="window in whole days before --date, not "
+                                 "including it (default 1 daily, 7 weekly)")
             sp.add_argument("--out", help="output directory (default site/mail)")
         if name == "build":
             sp.add_argument("--out", help="output directory (default ./site)")
@@ -1159,6 +1184,11 @@ def main(argv=None) -> int:
             sp.add_argument("--local", action="store_true",
                             help="include operator controls that post to "
                                  "scripts/serve_local.py -- never deploy this")
+        if name == "bills":
+            sp.add_argument("--changed", action="store_true",
+                            help="also re-fetch parsed bills whose last action "
+                                 "on the list has changed since; run "
+                                 "`enumerate --refresh` first")
         if name in ("bills", "docs"):
             sp.add_argument("--limit", type=int, default=0,
                             help="stop after N items -- use this to run the "

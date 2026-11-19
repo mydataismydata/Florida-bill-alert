@@ -88,7 +88,13 @@ def build(db, session: str, out: Path, product: str, today: date | None = None,
     """
     today = today or date.today()
     span = days or (1 if product == "daily" else 7)
-    nums = recent(db, session, today - timedelta(days=span), today)
+    # The window is the `span` whole days before `today`, and stops short of
+    # it. Run each morning, consecutive dailies then tile the calendar: each
+    # day is in exactly one, and a day is only reported once it is over. A
+    # window that included today put a bill filed before the run in that
+    # morning's email and again in the next.
+    nums = recent(db, session, today - timedelta(days=span),
+                  today - timedelta(days=1))
     if not nums:
         return None
 
