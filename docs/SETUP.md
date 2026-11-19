@@ -167,11 +167,21 @@ disabled apart from the search box, prints legibly and follows the reader's ligh
 cat > .env <<'EOF'
 FLBA_HOST=ubuntu@203.0.113.10
 FLBA_PATH=/srv/sessionwatch/site
+FLBA_DEPLOY_FROM=Seans-Mac-Studio     # this machine's `hostname -s`
 EOF
 
 scripts/deploy.sh          # dry run — shows what would change
 scripts/deploy.sh --go     # push
 ```
+
+**Only one machine publishes.** The code is in git and can be worked on
+anywhere, but the database is not, and every other copy of it is behind the
+analysis box's. A push mirrors the site exactly, so a push built from a stale
+copy removes whatever that copy lacks. `deploy.sh --go` and `deploy.py --go`
+or `--pack` therefore refuse to run unless `FLBA_DEPLOY_FROM` names the
+machine they are running on; that line goes in the analysis box's `.env`
+and nowhere else. Because it is a machine name, a `.env` copied to another
+machine still refuses. Dry runs work everywhere.
 
 This is the path for a public host that gives you a shell. `rsync --checksum`
 compares content rather than timestamps, which matters because the site is

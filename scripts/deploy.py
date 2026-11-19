@@ -35,6 +35,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import subprocess
 import sys
 import tempfile
@@ -230,6 +231,22 @@ def main() -> int:
         print(f"refusing to deploy: {SRC} was built with --local.\n"
               "rebuild without it:  flba --session 2026 build", file=sys.stderr)
         return 3
+    # One machine publishes, the one whose database is the real one -- the
+    # same rule, and the same .env line, as scripts/deploy.sh. A bundle made
+    # with --pack is a publish too, only by hand. A dry run is allowed.
+    here = platform.node().split(".")[0]
+    allowed = os.environ.get("FLBA_DEPLOY_FROM", "")
+    if (args.go or args.pack) and allowed.lower() != here.lower():
+        print(f"refusing to deploy from {here}.", file=sys.stderr)
+        if not allowed:
+            print("no machine is named as the one that publishes. On that "
+                  f"machine only, add this line to .env:\n"
+                  f"  FLBA_DEPLOY_FROM={here}", file=sys.stderr)
+        else:
+            print(f"only {allowed} publishes: the site is built from its "
+                  "database, and this machine's copy is behind it. "
+                  "A dry run works here.", file=sys.stderr)
+        return 4
 
     print(f"reading {SRC} ...")
     current = manifest(SRC)

@@ -67,6 +67,27 @@ fi
 DRY="--dry-run"
 [[ "${1:-}" == "--go" ]] && DRY=""
 
+# One machine publishes: the one whose database is the real one. The code is
+# in git and can be worked on anywhere, but the data is not, and every other
+# copy of it is behind. --delete makes the public tree an exact mirror of
+# what is pushed, so a push from a stale copy takes down whatever it lacks.
+# .env names the machine by its own name, so a .env copied to another
+# machine does not carry the right to publish with it. A dry run changes
+# nothing and is allowed anywhere.
+HERE="$(hostname -s)"
+if [[ -z "$DRY" ]] && ! [[ "$(tr '[:upper:]' '[:lower:]' <<<"${FLBA_DEPLOY_FROM:-}")" == "$(tr '[:upper:]' '[:lower:]' <<<"$HERE")" ]]; then
+  echo "refusing to deploy from $HERE." >&2
+  if [[ -z "${FLBA_DEPLOY_FROM:-}" ]]; then
+    echo "no machine is named as the one that publishes. On that machine only," >&2
+    echo "add this line to .env:" >&2
+    echo "  FLBA_DEPLOY_FROM=$HERE" >&2
+  else
+    echo "only $FLBA_DEPLOY_FROM publishes: the site is built from its database," >&2
+    echo "and this machine's copy is behind it. A dry run works here." >&2
+  fi
+  exit 4
+fi
+
 if [[ -n "$DRY" ]]; then
   echo "DRY RUN -- nothing will be written. Re-run with --go to push."
 fi
