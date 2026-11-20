@@ -250,10 +250,12 @@ scripts/nightly.sh --no-deploy   # the same, without pushing anything
 | stage | what it does |
 |---|---|
 | ingest | `enumerate --refresh`, then `bills --changed`: new bills, and bills whose last action on the list has moved since they were fetched. Then their documents, roll calls, statute index and sponsors. |
+| requests | `requests analyze`: bills readers asked for with the site's **Request AI analysis** button, read from the public host over SSH. Any session, oldest first, 25 a night. See [EMAIL.md](EMAIL.md#ad-hoc-requests). |
 | analyse | `analyze --stale`: bills with no analysis, and bills whose analysis is of an older version than the text now shown. A re-run replaces any hand edits. |
 | publish | builds the public site fresh into `.working/site-public` and pushes it. `site/` is left as the operator build. |
 | daily | writes the alert for **yesterday** and pushes it; `send.php` mails it within five minutes. |
 | weekly | on Mondays, the same for the seven days before. |
+| answer | `requests answer`: the requested bills whose live page now carries the analysis. `send.php` writes to whoever asked and closes the request. |
 
 The pages are pushed before the alert is written, because the alert links to
 them and `send.php` sends a payload as soon as it lands. If the push fails, no

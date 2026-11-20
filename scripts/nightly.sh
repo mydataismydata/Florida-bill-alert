@@ -2,10 +2,13 @@
 # The production run, start to finish, on the analysis box.
 #
 #   1. Ingest   new bills, and bills that moved, from flsenate.gov
-#   2. Analyse  new bills, and bills with a newer version, with the local model
+#   2. Analyse  bills readers asked for on the site, any session, first;
+#               then new bills, and bills with a newer version
 #   3. Publish  the site to the public host
 #   4. Daily    write yesterday's alert and publish it; send.php mails it
 #   5. Weekly   on Mondays, the same for the seven days before
+#   6. Answer   the requests whose bill is now analysed on the live site;
+#               send.php writes to whoever asked
 #
 # Scheduled by deploy/launchd/org.knowyourlegislation.nightly.plist. Run it by
 # hand the same way:
@@ -107,8 +110,14 @@ step "members"   flba members
 step "finance"   flba finance
 
 # --------------------------------------------------------------- 2. analyse
-# Exits 2 when the model server does not answer. The run carries on without
-# it: the site and the alert still go out, and the bills wait for tomorrow.
+# Both exit 2 when the model server does not answer. The run carries on
+# without it: the site and the alert still go out, and the bills wait for
+# tomorrow.
+#
+# Requests first: someone is waiting on those. They are read from the public
+# host over SSH (exit 3 if it cannot be reached) and can be for any session.
+# Capped, so a burst of them cannot crowd out the night's new bills.
+step "requests"  flba requests analyze --limit 25
 step "analyze"   flba analyze --stale --order number
 
 # --------------------------------------------------------------- 3. publish
@@ -149,6 +158,12 @@ if [[ "$(date +%u)" == 1 ]]; then
 fi
 
 if (( DEPLOY )); then
+  # ------------------------------------------------------------- 6. answer
+  # Only once the pages are up, and read off the tree that just went up: a
+  # request is answered when its bill's live page no longer offers the
+  # button, which is what the person who asked will find.
+  step "answer requests" flba requests answer --site "$PUBLIC" --out "$PUBLIC/mail"
+
   # Only the new payloads change, so this is quick. send.php picks them up
   # on its next five-minute pass.
   step "deploy mail" deploy

@@ -31,8 +31,10 @@ CREATE TABLE IF NOT EXISTS sent (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sent_once ON sent (subscriber_id, payload);
 
--- "Analyse this bill" from a bill page. The analysis box pulls these, and
--- here ever reaches inward on its own.
+-- "Analyse this bill" from a bill page. The analysis box reads the open ones
+-- over SSH (requests.php); nothing here ever reaches inward on its own.
+-- send.php closes a request once the bill's page carries its analysis, and
+-- clears the address as it does: it was given for that one message.
 CREATE TABLE IF NOT EXISTS request (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     session    TEXT NOT NULL,

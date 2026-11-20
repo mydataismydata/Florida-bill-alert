@@ -186,6 +186,14 @@ CREATE TABLE IF NOT EXISTS roll_call_info (
     PRIMARY KEY (session, num, url)
 );
 
+-- Failed attempts at a bill someone asked for from the public site
+-- (requested.py). The requests themselves live on the public server; this
+-- only lets a bill the model keeps failing on fall behind the others.
+CREATE TABLE IF NOT EXISTS request_try (
+    session TEXT, num INTEGER, tries INTEGER DEFAULT 0, last TEXT,
+    PRIMARY KEY (session, num)
+);
+
 CREATE INDEX IF NOT EXISTS idx_change_bill ON change(session, num);
 CREATE INDEX IF NOT EXISTS idx_roll_call_bill ON roll_call(session, num);
 CREATE INDEX IF NOT EXISTS idx_statute ON statute_ref(session, statute);

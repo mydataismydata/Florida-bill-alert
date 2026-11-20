@@ -1060,6 +1060,92 @@ def cmd_analyze(args) -> int:
     return 1 if failed else 0
 
 
+def cmd_requests(args) -> int:
+    """Analysis requests from the public site: list, analyse, answer.
+
+    Every session at once -- a request names its own -- so --session does
+    not apply.
+    """
+    from datetime import date
+
+    from . import requested
+
+    store = Store(DATA / "index.sqlite")
+    db = store.db
+    try:
+        reqs = requested.fetch()
+    except requested.Unavailable as exc:
+        print(f"requests: could not read them from the public host\n  {exc}",
+              file=sys.stderr)
+        return 3
+
+    if args.action == "list":
+        if not reqs:
+            print("no open requests")
+            return 0
+        tries = requested._tries(db)
+        for r in reqs:
+            s, n = r["session"], r["num"]
+            state = ("no such bill" if not requested._known(db, s, n) else
+                     "analysed; answered after the next deploy"
+                     if requested._analysed(db, s, n) else "waiting")
+            t = tries.get((s, n), 0)
+            print(f"  {s} {n:>5}  x{r['n']}  first {r['first']}  {state}"
+                  f"{f'  ({t} failed)' if t else ''}")
+        return 0
+
+    if args.action == "answer":
+        site = Path(args.site) if args.site else ROOT / ".working" / "site-public"
+        if not (site / "index.html").exists():
+            print(f"no built site at {site}", file=sys.stderr)
+            return 2
+        doc = requested.answer(db, reqs, site)
+        if doc is None:
+            print(f"answer: {len(reqs)} open, none ready -- nothing written")
+            return 0
+        out = Path(args.out) if args.out else site / "mail"
+        path = requested.write(doc, out, date.today().isoformat())
+        print(f"answer: {len(doc['ready'])} ready, {len(doc['unknown'])} "
+              f"not a bill, of {len(reqs)} open -> {path}")
+        return 0
+
+    # analyze
+    from .analysis.analyze import analyze
+    from .analysis.backend import Backend
+
+    todo = requested.queue(db, reqs, args.limit)
+    print(f"requests: {len(reqs)} open, {len(todo)} to analyse")
+    if not todo:
+        return 0
+    backend = Backend(base_url=args.base_url, model=args.model,
+                      api_key=args.api_key)
+    if not backend.available():
+        print(f"no model server answering at {args.base_url}\n"
+              f"  is oMLX open, with {args.model} loaded?", file=sys.stderr)
+        return 2
+
+    failed = 0
+    for r in todo:
+        s, n = r["session"], r["num"]
+        try:
+            result = analyze(db, s, n, backend, log=lambda *_: None)
+        except Exception as exc:
+            result = None
+            print(f"  {s} {n}: {exc}")
+        if result is None:
+            failed += 1
+            requested.record_try(db, s, n)
+            print(f"  {s} {n}: failed")
+            continue
+        store.save_analysis(result)
+        print(f"  {s} {result.label}: {result.summary.get('one_line', '')[:90]}")
+
+    bs = backend.stats
+    print(f"\nrequests: done. failed={failed}  "
+          f"{bs['completion_tokens']:,} tokens, {bs['seconds']/60:.1f} min")
+    return 1 if failed else 0
+
+
 def cmd_status(args) -> int:
     _, store, index_path = _paths(args.session)
     db, s = store.db, args.session
@@ -1102,7 +1188,7 @@ def main(argv=None) -> int:
                      ("statutes", cmd_statutes),
                      ("analyze", cmd_analyze), ("build", cmd_build),
                      ("members", cmd_members), ("reverify", cmd_reverify),
-                     ("finance", cmd_finance),
+                     ("finance", cmd_finance), ("requests", cmd_requests),
                      ("digest", cmd_digest), ("status", cmd_status)):
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
@@ -1167,6 +1253,25 @@ def main(argv=None) -> int:
             sp.add_argument("--api-key",
                             default=os.environ.get("FLBA_API_KEY") or None,
                             help="defaults to FLBA_API_KEY from .env")
+        if name == "requests":
+            sp.add_argument("action", nargs="?", default="list",
+                            choices=["list", "analyze", "answer"],
+                            help="list: what is open; analyze: the requested "
+                                 "bills not yet done; answer: after a deploy, "
+                                 "the payload send.php replies from")
+            sp.add_argument("--limit", type=int, default=25,
+                            help="analyze at most N requested bills (0: all)")
+            sp.add_argument("--site", help="answer: the tree just published "
+                                           "(default .working/site-public)")
+            sp.add_argument("--out", help="answer: where the payload goes "
+                                          "(default <site>/mail)")
+            sp.add_argument("--base-url",
+                            default=os.environ.get("FLBA_BASE_URL",
+                                                   DEFAULT_BASE_URL))
+            sp.add_argument("--model",
+                            default=os.environ.get("FLBA_MODEL", DEFAULT_MODEL))
+            sp.add_argument("--api-key",
+                            default=os.environ.get("FLBA_API_KEY") or None)
         if name == "digest":
             sp.add_argument("--product", default="both",
                             choices=["daily", "weekly", "both"])

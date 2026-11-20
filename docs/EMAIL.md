@@ -98,3 +98,46 @@ The **Request AI analysis** button on an un-analysed bill writes a row and
 stops. The analysis box pulls those on its next run; nothing on the public side
 can reach inward. That is the one place where a public action leads to work on
 the private machine, and it is deliberately a queue rather than a call.
+
+```
+  public server                         analysis box
+  -------------                         ------------
+  request-analysis.php  ──►  request table
+  requests.php (cli)    ──── ssh ────►  flba requests analyze   (nightly, first)
+                                        build, deploy
+  send.php  ◄──  mail/YYYY-MM-DD-ready.json  ◄──  flba requests answer
+     └──►  the people who asked
+```
+
+- **What the box sees.** `requests.php` prints which bills were asked for,
+  when, and how many times. Never who asked: the addresses stay on the public
+  server, and the payload that comes back names bills, not people.
+- **Order.** The nightly run analyses requested bills before its own work,
+  oldest first, any session, up to 25 a night. A bill the model fails on
+  falls behind the others the next night rather than holding them up.
+- **When someone is told.** `flba requests answer` runs after the deploy and
+  reads the tree that just went up: a bill is ready when its published page
+  no longer shows the button. `send.php` then writes to each address once,
+  one message however many of its bills are ready, and closes the requests.
+  The address is cleared as the request is closed; it was given for that one
+  message.
+- **Limits.** One open request per bill per address. An address with 20
+  requests open is not taken for more (the request still counts, without the
+  address, and the page makes no promise to write).
+- **Requests for no bill** can only come from a hand-made post. They are
+  closed without a reply.
+
+A `ready` payload has no `bills` list, so a `send.php` older than this skips
+it instead of mailing it to every subscriber. Each entry carries `upto`, the
+newest request it covers, and closes nothing made after that, so a payload
+left in the folder never answers a request it did not see.
+
+```bash
+flba requests                 # what is open, and where each one stands
+flba requests analyze         # the requested bills not yet done
+flba requests answer          # after a deploy: the payload send.php replies from
+```
+
+The box reaches PHP on the public host with `FLBA_PHP` from `.env`, default
+`docker exec -u 33 sessionwatch-php php`, over the same `FLBA_HOST` the
+deploy uses.
